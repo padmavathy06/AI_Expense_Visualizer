@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Executive Wealth Dashboard - AI Expense Visualizer</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <!-- ================= NAVBAR ================= -->
+    <header class="navbar">
+        <div class="brand-logo">
+            <div class="logo-icon">💰</div>
+            <span>AI Expense Visualizer</span>
+        </div>
+
+        <nav class="nav-links">
+            <a href="/" class="nav-link active">📊 Dashboard</a>
+            <a href="/transactions" class="nav-link">💳 Ledger</a>
+            <a href="/accounts" class="nav-link">🏦 Accounts</a>
+            <a href="/subscriptions" class="nav-link">🔄 Subscriptions</a>
+            <a href="/goals" class="nav-link">🎯 Goals</a>
+            <a href="/analytics" class="nav-link">📈 Analytics</a>
+            <a href="/ai-insights" class="nav-link">🤖 AI Advisor</a>
+        </nav>
+
+        <div class="nav-actions">
+            <button id="themeToggleBtn" class="theme-toggle-btn" title="Toggle Dark/Light Mode">🌙</button>
+            <button class="btn btn-ai btn-sm" data-modal-target="quickAddModal">⚡ AI Quick Add</button>
+            <a href="/add-expense" class="btn btn-primary btn-sm">+ Log Spend</a>
+        </div>
+    </header>
+
+    <!-- ================= MAIN CONTAINER ================= -->
+    <main class="app-container">
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-alert flash-{{ category }}">
+                        <span>{{ "✅" if category == "success" else "⚠️" }}</span>
+                        <span>{{ message }}</span>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Page Header -->
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">Executive Wealth Dashboard</h1>
+                <p class="page-subtitle">Real-time net worth tracking, multi-account banking, AI budget optimization, and portfolio metrics.</p>
+            </div>
+
+            <div class="header-action-group">
+                <button class="btn btn-secondary btn-sm" data-modal-target="transferModal">💸 Transfer Money</button>
+                <button class="btn btn-secondary btn-sm" data-modal-target="receiptModal">📸 Scan Receipt</button>
+                <a href="/import" class="btn btn-secondary btn-sm">📥 Bank CSV Import</a>
+                <form action="/api/seed-demo-data" method="POST" style="display:inline;" onsubmit="return confirm('Seed demo dataset? Loads 25+ transactions, 5 accounts, 6 subscriptions, and 4 goals.');">
+                    <button type="submit" class="btn btn-secondary btn-sm">🌱 Demo Data</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- ================= TOP WEALTH METRICS GRID ================= -->
+        <section class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-card-top">
+                    <span class="metric-label">Total Net Worth</span>
+                    <div class="metric-icon-wrap icon-purple">💎</div>
+                </div>
+                <div class="metric-value">₹{{ "%.2f"|format(net_worth|float) }}</div>
+                <div class="metric-subtitle">
+                    <span>Assets: ₹{{ "%.0f"|format(total_assets) }} &bull; Dues: ₹{{ "%.0f"|format(liabilities) }}</span>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-card-top">
+                    <span class="metric-label">Liquid Assets</span>
+                    <div class="metric-icon-wrap icon-cyan">💧</div>
+                </div>
+                <div class="metric-value">₹{{ "%.2f"|format(liquid_assets|float) }}</div>
+                <div class="metric-subtitle">
+                    <span>Available across {{ accounts|length }} accounts</span>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-card-top">
+                    <span class="metric-label">This Month Spend</span>
+                    <div class="metric-icon-wrap icon-amber">📅</div>
+                </div>
+                <div class="metric-value">₹{{ "%.2f"|format(monthly_expenses|float) }}</div>
+                <div class="metric-subtitle">
+                    <span>{{ "%.1f"|format((monthly_expenses / budget * 100) if budget > 0 else 0) }}% of ₹{{ "%.0f"|format(budget) }} budget</span>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-card-top">
+                    <span class="metric-label">Recurring Burn</span>
+                    <div class="metric-icon-wrap icon-rose">🔄</div>
+                </div>
+                <div class="metric-value">₹{{ "%.2f"|format(sub_summary.monthly_recurring|float) }}</div>
+                <div class="metric-subtitle">
+                    <span>{{ sub_summary.active_count }} active subscriptions</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= AI HEALTH SCORE BANNER ================= -->
+        <section class="ai-health-banner">
+            <div class="ai-health-left">
+                <div class="health-grade-badge">{{ ai_analysis.grade }}</div>
+                <div class="health-info">
+                    <h4>{{ ai_analysis.verdict }} (Health Score: {{ ai_analysis.score }}/100)</h4>
+                    <p>
+                        Daily Burn: <strong>₹{{ "%.2f"|format(ai_analysis.daily_avg|float) }}</strong> &bull;
+                        Month-End Projected: <strong>₹{{ "%.2f"|format(ai_analysis.projected_monthly|float) }}</strong> &bull;
+                        Next Month Est: <strong>₹{{ "%.2f"|format(ai_analysis.forecast_next_month|float) }}</strong>
+                    </p>
+                </div>
+            </div>
+            <a href="/ai-insights" class="btn btn-ai btn-sm">Ask AI Advisor &rarr;</a>
+        </section>
+
+        <!-- ================= 50/30/20 BUDGET BENCHMARK METER ================= -->
+        <section class="budget-widget-card">
+            <div class="budget-widget-header">
+                <div>
+                    <h3 style="font-weight: 700;">50 / 30 / 20 Financial Rule Compliance</h3>
+                    <p style="font-size: 0.88rem; color: var(--text-secondary);">
+                        Comparing your monthly spend against recommended financial health ratios.
+                    </p>
+                </div>
+                <div style="display: flex; gap: 0.5rem;">
+                    <span class="badge-category cat-Education">50% Needs</span>
+                    <span class="badge-category cat-Shopping">30% Wants</span>
+                    <span class="badge-category cat-Salary">20% Savings</span>
+                </div>
+            </div>
+
+            <div style="display: flex; height: 16px; border-radius: var(--radius-full); overflow: hidden; margin: 1rem 0; background: var(--bg-surface-subtle);">
+                <div style="width: {{ compliance.needs_pct }}%; background: #10b981;" title="Needs: {{ compliance.needs_pct }}%"></div>
+                <div style="width: {{ compliance.wants_pct }}%; background: #f59e0b;" title="Wants: {{ compliance.wants_pct }}%"></div>
+                <div style="width: {{ compliance.savings_pct }}%; background: #6366f1;" title="Savings: {{ compliance.savings_pct }}%"></div>
+            </div>
+
+            <div class="budget-meta-row">
+                <span>🛡️ Needs: <strong>{{ compliance.needs_pct }}%</strong> (₹{{ "%.0f"|format(compliance.needs_amount) }})</span>
+                <span>🛍️ Wants: <strong>{{ compliance.wants_pct }}%</strong> (₹{{ "%.0f"|format(compliance.wants_amount) }})</span>
+                <span>💎 Savings: <strong>{{ compliance.savings_pct }}%</strong> (₹{{ "%.0f"|format(compliance.savings_amount) }})</span>
+            </div>
+        </section>
+
+        <!-- ================= CHARTS GRID ================= -->
+        <section class="charts-grid">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h3 class="chart-title">Expense Distribution by Category</h3>
+                    <span style="font-size: 0.82rem; color: var(--text-muted);">All-Time</span>
+                </div>
+                <div class="chart-canvas-wrap">
+                    <canvas id="categoryChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h3 class="chart-title">Monthly Trajectory</h3>
+                    <span style="font-size: 0.82rem; color: var(--text-muted);">Historical Trends</span>
+                </div>
+                <div class="chart-canvas-wrap">
+                    <canvas id="monthlyChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= LINKED ACCOUNTS CAROUSEL & GOALS ================= -->
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+
+            <!-- Linked Accounts Preview -->
+            <div class="table-card" style="padding: 1.5rem; margin-bottom: 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
+                    <div>
+                        <h3 style="font-weight: 700;">Banking & Wallet Balances</h3>
+                        <p style="font-size: 0.85rem; color: var(--text-secondary);">Live balances across linked institutions</p>
+                    </div>
+                    <a href="/accounts" class="btn btn-secondary btn-sm">Manage &rarr;</a>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                    {% for acc in accounts[:4] %}
+                    <div style="background: var(--bg-surface-subtle); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <span style="font-size: 1.2rem;">{{ acc.icon }}</span>
+                            <span class="badge-payment">{{ acc.type }}</span>
+                        </div>
+                        <div style="font-weight: 700; font-size: 0.9rem; color: var(--text-primary);">{{ acc.name }}</div>
+                        <div style="font-family: 'JetBrains Mono'; font-weight: 700; font-size: 1.15rem; margin-top: 0.25rem;">
+                            ₹{{ "%.2f"|format(acc.balance) }}
+                        </div>
+                        {% if acc.type == 'Credit Card' and acc.card_limit > 0 %}
+                        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.35rem;">
+                            Limit: ₹{{ "%.0f"|format(acc.card_limit) }} ({{ acc.utilization_pct }}% used)
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Financial Goals Snapshot -->
+            <div class="table-card" style="padding: 1.5rem; margin-bottom: 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
+                    <h3 style="font-weight: 700;">Savings Goals</h3>
+                    <a href="/goals" class="btn btn-secondary btn-sm">All Goals &rarr;</a>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
+                    {% for goal in goals %}
+                    <div>
+                        <div style="display: flex; justify-content: space-between; font-size: 0.88rem; font-weight: 600; margin-bottom: 0.35rem;">
+                            <span>{{ goal.icon }} {{ goal.title }}</span>
+                            <span>{{ goal.percentage }}%</span>
+                        </div>
+                        <div class="progress-bar-container" style="height: 6px; margin: 0;">
+                            <div class="progress-bar-fill progress-success" style="width: {{ goal.percentage }}%;"></div>
+                        </div>
+                        <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.25rem;">
+                            ₹{{ "%.0f"|format(goal.current_amount) }} of ₹{{ "%.0f"|format(goal.target_amount) }}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ================= RECENT TRANSACTIONS ================= -->
+        <section class="table-card">
+            <div class="table-header-bar">
+                <div>
+                    <h3 style="font-weight: 700;">Recent Ledger Activity</h3>
+                    <p style="font-size: 0.85rem; color: var(--text-secondary);">Latest 6 recorded transactions</p>
+                </div>
+                <div style="display: flex; gap: 0.5rem;">
+                    <a href="/transactions" class="btn btn-secondary btn-sm">Full Ledger &rarr;</a>
+                    <a href="/add-expense" class="btn btn-primary btn-sm">+ Add Transaction</a>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                {% if recent_expenses %}
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Category</th>
+                            <th>Description</th>
+                            <th>Payment Method</th>
+                            <th>Amount</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for expense in recent_expenses %}
+                        <tr>
+                            <td>{{ expense.expense_date }}</td>
+                            <td><span class="badge-category cat-{{ expense.category }}">{{ expense.category }}</span></td>
+                            <td>{{ expense.description or "-" }}</td>
+                            <td><span class="badge-payment">{{ expense.payment_method or "UPI" }}</span></td>
+                            <td class="amount-cell">₹{{ "%.2f"|format(expense.amount|float) }}</td>
+                            <td>
+                                <a href="/edit-expense/{{ expense.id }}" class="btn btn-secondary btn-sm" style="padding: 0.25rem 0.6rem;">✏️ Edit</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div style="padding: 3rem; text-align: center; color: var(--text-muted);">
+                    <p>No transactions logged yet.</p>
+                </div>
+                {% endif %}
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ================= MODALS ================= -->
+
+    <!-- 1. AI QUICK-ADD MODAL -->
+    <div id="quickAddModal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 style="font-weight: 800; display: flex; align-items: center; gap: 0.5rem;">
+                    <span>⚡</span> AI Smart Quick-Add
+                </h3>
+                <button class="close-modal-btn">&times;</button>
+            </div>
+            <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1rem;">
+                Type or speak your transaction in natural language.
+            </p>
+
+            <div class="form-control" style="margin-bottom: 1rem;">
+                <input type="text" id="quickAddInput" class="form-input" placeholder="e.g. Spent ₹650 on Domino's pizza with UPI yesterday" autocomplete="off">
+            </div>
+
+            <div style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1.25rem;">
+                <button type="button" class="btn btn-secondary btn-sm quick-chip">"450 lunch via UPI"</button>
+                <button type="button" class="btn btn-secondary btn-sm quick-chip">"Paid 2200 for wifi bill with Credit Card"</button>
+                <button type="button" class="btn btn-secondary btn-sm quick-chip">"Uber cab 380 rs cash yesterday"</button>
+            </div>
+
+            <div id="quickAddPreview" style="display: none; background: var(--bg-surface-subtle); padding: 0.85rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); margin-bottom: 1.25rem;"></div>
+
+            <div style="display: flex; gap: 0.75rem;">
+                <button type="button" id="quickAddParseBtn" class="btn btn-secondary" style="flex: 1;">Preview</button>
+                <button type="button" id="quickAddSubmitBtn" class="btn btn-ai" style="flex: 2;">⚡ Confirm & Add</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. TRANSFER MODAL -->
+    <div id="transferModal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 style="font-weight: 800;">💸 Transfer Money Between Accounts</h3>
+                <button class="close-modal-btn">&times;</button>
+            </div>
+            <form action="/api/accounts/transfer" method="POST">
+                <div class="form-control" style="margin-bottom: 1rem;">
+                    <label for="from_acc">From Account</label>
+                    <select name="from_account_id" id="from_acc" class="form-select" required>
+                        {% for acc in accounts %}
+                        <option value="{{ acc.id }}">{{ acc.icon }} {{ acc.name }} (₹{{ "%.2f"|format(acc.balance) }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-control" style="margin-bottom: 1rem;">
+                    <label for="to_acc">To Account</label>
+                    <select name="to_account_id" id="to_acc" class="form-select" required>
+                        {% for acc in accounts %}
+                        <option value="{{ acc.id }}" {% if loop.index == 2 %}selected{% endif %}>{{ acc.icon }} {{ acc.name }} (₹{{ "%.2f"|format(acc.balance) }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-control" style="margin-bottom: 1rem;">
+                    <label for="transfer_amt">Amount (₹)</label>
+                    <input type="number" name="amount" id="transfer_amt" class="form-input" min="1" step="0.01" placeholder="0.00" required>
+                </div>
+                <div class="form-control" style="margin-bottom: 1.25rem;">
+                    <label for="transfer_notes">Notes / Purpose</label>
+                    <input type="text" name="notes" id="transfer_notes" class="form-input" placeholder="e.g. Credit card payment, Wallet topup">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Complete Transfer</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 3. AI RECEIPT SCANNER MODAL -->
+    <div id="receiptModal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 style="font-weight: 800; display: flex; align-items: center; gap: 0.5rem;">
+                    <span>📸</span> AI Receipt & Bill Scanner
+                </h3>
+                <button class="close-modal-btn">&times;</button>
+            </div>
+            <div id="receiptDropZone" style="border: 2px dashed var(--border-strong); border-radius: var(--radius-md); padding: 2rem; text-align: center; cursor: pointer; margin-bottom: 1rem; background: var(--bg-surface-subtle);">
+                <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">📁</div>
+                <p style="font-weight: 600;">Drag & drop receipt here, or <span style="color: var(--brand-primary);">browse</span></p>
+                <input type="file" id="receiptFileInput" accept="image/*" style="display: none;">
+            </div>
+            <div id="receiptScanStatus" style="display: none; text-align: center; color: var(--brand-primary); font-weight: 600; margin-bottom: 1rem;"></div>
+            <div id="receiptScanResult" style="display: none; margin-bottom: 1rem;"></div>
+        </div>
+    </div>
+
+    <!-- Chart Script -->
+    <script>
+        const categoryLabels = {{ category_data | map(attribute='category') | list | tojson }};
+        const categoryValues = {{ category_data | map(attribute='total') | map('float') | list | tojson }};
+        const monthLabels = {{ monthly_data | map(attribute='month') | list | tojson }};
+        const monthValues = {{ monthly_data | map(attribute='total') | map('float') | list | tojson }};
+
+        let catChartInstance = null;
+        let monthChartInstance = null;
+
+        window.renderDashboardCharts = function() {
+            const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+            const textColor = isDark ? "#cbd5e1" : "#475569";
+            const gridColor = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
+
+            const catCtx = document.getElementById("categoryChart");
+            if (catCtx) {
+                if (catChartInstance) catChartInstance.destroy();
+                catChartInstance = new Chart(catCtx, {
+                    type: "doughnut",
+                    data: {
+                        labels: categoryLabels.length ? categoryLabels : ["No Data"],
+                        datasets: [{
+                            data: categoryValues.length ? categoryValues : [1],
+                            backgroundColor: ["#f97316", "#0ea5e9", "#a855f7", "#eab308", "#10b981", "#ef4444", "#ec4899", "#64748b"],
+                            borderWidth: 2,
+                            borderColor: isDark ? "#111827" : "#ffffff",
+                            hoverOffset: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: "right", labels: { color: textColor, font: { family: 'Plus Jakarta Sans', size: 12 } } },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(ctx) { return ` ₹${Number(ctx.parsed).toLocaleString('en-IN', {minimumFractionDigits: 2})}`; }
+                                }
+                            }
+                        },
+                        cutout: "68%"
+                    }
+                });
+            }
+
+            const monthCtx = document.getElementById("monthlyChart");
+            if (monthCtx) {
+                if (monthChartInstance) monthChartInstance.destroy();
+                monthChartInstance = new Chart(monthCtx, {
+                    type: "bar",
+                    data: {
+                        labels: monthLabels.length ? monthLabels : ["Current"],
+                        datasets: [{
+                            label: "Total Expenses (₹)",
+                            data: monthValues.length ? monthValues : [0],
+                            backgroundColor: "rgba(79, 70, 229, 0.75)",
+                            hoverBackgroundColor: "rgba(79, 70, 229, 1)",
+                            borderRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { grid: { display: false }, ticks: { color: textColor, font: { family: 'Plus Jakarta Sans' } } },
+                            y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: textColor, callback: (v) => '₹' + v } }
+                        }
+                    }
+                });
+            }
+        };
+
+        document.addEventListener("DOMContentLoaded", window.renderDashboardCharts);
+    </script>
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

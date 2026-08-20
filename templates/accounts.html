@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Banking & Multi-Account Management - AI Expense Visualizer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+    <!-- ================= NAVBAR ================= -->
+    <header class="navbar">
+        <div class="brand-logo">
+            <div class="logo-icon">💰</div>
+            <span>AI Expense Visualizer</span>
+        </div>
+
+        <nav class="nav-links">
+            <a href="/" class="nav-link">📊 Dashboard</a>
+            <a href="/transactions" class="nav-link">💳 Ledger</a>
+            <a href="/accounts" class="nav-link active">🏦 Accounts</a>
+            <a href="/subscriptions" class="nav-link">🔄 Subscriptions</a>
+            <a href="/goals" class="nav-link">🎯 Goals</a>
+            <a href="/analytics" class="nav-link">📈 Analytics</a>
+            <a href="/ai-insights" class="nav-link">🤖 AI Advisor</a>
+        </nav>
+
+        <div class="nav-actions">
+            <button id="themeToggleBtn" class="theme-toggle-btn" title="Toggle Dark/Light Mode">🌙</button>
+            <button class="btn btn-secondary btn-sm" data-modal-target="transferModal">💸 Transfer</button>
+            <button class="btn btn-primary btn-sm" data-modal-target="addAccountModal">+ New Account</button>
+        </div>
+    </header>
+
+    <!-- ================= MAIN CONTAINER ================= -->
+    <main class="app-container">
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-alert flash-{{ category }}">
+                        <span>{{ "✅" if category == "success" else "⚠️" }}</span>
+                        <span>{{ message }}</span>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">🏦 Banking & Accounts Hub</h1>
+                <p class="page-subtitle">Track multi-bank accounts, digital wallets, credit card limits, and portfolio investments.</p>
+            </div>
+            <div class="header-action-group">
+                <button class="btn btn-secondary btn-sm" data-modal-target="transferModal">💸 Transfer Money</button>
+                <button class="btn btn-primary btn-sm" data-modal-target="addAccountModal">+ Link Account</button>
+            </div>
+        </div>
+
+        <!-- Net Worth Summary Banner -->
+        <div class="ai-health-banner" style="margin-bottom: 2rem;">
+            <div class="ai-health-left">
+                <div class="health-grade-badge" style="background: linear-gradient(135deg, #10b981, #06b6d4);">💎</div>
+                <div>
+                    <span style="font-size: 0.8rem; font-weight: 700; color: var(--brand-primary); text-transform: uppercase;">Total Financial Net Worth</span>
+                    <h2 style="font-size: 1.65rem; font-weight: 800; font-family: 'JetBrains Mono';">₹{{ "%.2f"|format(net_worth) }}</h2>
+                    <p style="font-size: 0.88rem; color: var(--text-secondary);">
+                        Liquid: <strong>₹{{ "%.0f"|format(liquid_assets) }}</strong> &bull;
+                        Invested: <strong>₹{{ "%.0f"|format(total_assets - liquid_assets) }}</strong> &bull;
+                        Liabilities: <strong>₹{{ "%.0f"|format(liabilities) }}</strong>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Accounts Grid -->
+        <div class="accounts-grid">
+            {% for acc in accounts %}
+            <div class="account-card" style="border-top: 4px solid {{ acc.color or 'var(--brand-primary)' }};">
+                <div>
+                    <div class="acc-card-top">
+                        <div class="acc-icon-badge">{{ acc.icon }}</div>
+                        <span class="badge-payment">{{ acc.type }}</span>
+                    </div>
+                    <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary); margin-bottom: 0.25rem;">
+                        {{ acc.name }}
+                    </h3>
+                    <div class="acc-balance-display">
+                        ₹{{ "%.2f"|format(acc.balance) }}
+                    </div>
+
+                    {% if acc.type == 'Credit Card' and acc.card_limit > 0 %}
+                    <div style="margin-top: 1rem; background: var(--bg-surface-subtle); padding: 0.75rem; border-radius: var(--radius-sm);">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.25rem;">
+                            <span>Credit Limit Used: {{ acc.utilization_pct }}%</span>
+                            <span>Limit: ₹{{ "%.0f"|format(acc.card_limit) }}</span>
+                        </div>
+                        <div class="progress-bar-container" style="height: 6px; margin: 0;">
+                            <div class="progress-bar-fill {{ 'progress-danger' if acc.utilization_pct > 50 else 'progress-success' }}"
+                                 style="width: {{ acc.utilization_pct }}%;"></div>
+                        </div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.35rem;">
+                            Available Credit: ₹{{ "%.2f"|format(acc.available_credit) }}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.25rem; padding-top: 0.75rem; border-top: 1px solid var(--border-subtle);">
+                    <a href="/transactions?account_id={{ acc.id }}" style="font-size: 0.82rem; font-weight: 600; color: var(--brand-primary);">View Transactions &rarr;</a>
+                    <form action="/api/accounts/delete/{{ acc.id }}" method="POST" onsubmit="return confirm('Remove this account?');">
+                        <button type="submit" style="background: none; border: none; font-size: 0.8rem; color: var(--danger-text); cursor: pointer;">Delete</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+    </main>
+
+    <!-- Add Account Modal -->
+    <div id="addAccountModal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 style="font-weight: 800;">🏦 Link New Banking / Wallet Account</h3>
+                <button class="close-modal-btn">&times;</button>
+            </div>
+            <form action="/api/accounts/create" method="POST">
+                <div class="form-control" style="margin-bottom: 1rem;">
+                    <label for="acc_name">Account Name *</label>
+                    <input type="text" name="name" id="acc_name" class="form-input" placeholder="e.g. HDFC Salary Account, ICICI Platinum Card" required>
+                </div>
+                <div class="form-control" style="margin-bottom: 1rem;">
+                    <label for="acc_type">Account Type *</label>
+                    <select name="type" id="acc_type" class="form-select" required>
+                        {% for atype in account_types %}
+                        <option value="{{ atype }}">{{ atype }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-control" style="margin-bottom: 1rem;">
+                    <label for="acc_balance">Current Balance (₹)</label>
+                    <input type="number" name="balance" id="acc_balance" class="form-input" step="0.01" value="0.00" required>
+                </div>
+                <div class="form-control" style="margin-bottom: 1rem;">
+                    <label for="acc_limit">Credit Card Limit (if applicable)</label>
+                    <input type="number" name="card_limit" id="acc_limit" class="form-input" step="1000" value="0">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Create Account</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Transfer Modal -->
+    <div id="transferModal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 style="font-weight: 800;">💸 Inter-Account Money Transfer</h3>
+                <button class="close-modal-btn">&times;</button>
+            </div>
+            <form action="/api/accounts/transfer" method="POST">
+                <div class="form-control" style="margin-bottom: 1rem;">
+                    <label for="transfer_from">From</label>
+                    <select name="from_account_id" id="transfer_from" class="form-select" required>
+                        {% for acc in accounts %}
+                        <option value="{{ acc.id }}">{{ acc.icon }} {{ acc.name }} (₹{{ "%.2f"|format(acc.balance) }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-control" style="margin-bottom: 1rem;">
+                    <label for="transfer_to">To</label>
+                    <select name="to_account_id" id="transfer_to" class="form-select" required>
+                        {% for acc in accounts %}
+                        <option value="{{ acc.id }}" {% if loop.index == 2 %}selected{% endif %}>{{ acc.icon }} {{ acc.name }} (₹{{ "%.2f"|format(acc.balance) }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-control" style="margin-bottom: 1rem;">
+                    <label for="t_amount">Amount (₹)</label>
+                    <input type="number" name="amount" id="t_amount" class="form-input" min="1" step="0.01" required>
+                </div>
+                <div class="form-control" style="margin-bottom: 1.25rem;">
+                    <label for="t_notes">Description</label>
+                    <input type="text" name="notes" id="t_notes" class="form-input" placeholder="e.g. Card payment, Wallet topup">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Complete Transfer</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

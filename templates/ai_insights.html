@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Financial Intelligence & Multi-Persona Advisor - AI Expense Visualizer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <!-- ================= NAVBAR ================= -->
+    <header class="navbar">
+        <div class="brand-logo">
+            <div class="logo-icon">💰</div>
+            <span>AI Expense Visualizer</span>
+        </div>
+
+        <nav class="nav-links">
+            <a href="/" class="nav-link">📊 Dashboard</a>
+            <a href="/transactions" class="nav-link">💳 Ledger</a>
+            <a href="/accounts" class="nav-link">🏦 Accounts</a>
+            <a href="/subscriptions" class="nav-link">🔄 Subscriptions</a>
+            <a href="/goals" class="nav-link">🎯 Goals</a>
+            <a href="/analytics" class="nav-link">📈 Analytics</a>
+            <a href="/ai-insights" class="nav-link active">🤖 AI Advisor</a>
+        </nav>
+
+        <div class="nav-actions">
+            <button id="themeToggleBtn" class="theme-toggle-btn" title="Toggle Dark/Light Mode">🌙</button>
+            <button class="btn btn-ai btn-sm" data-modal-target="quickAddModal">⚡ AI Quick Add</button>
+        </div>
+    </header>
+
+    <!-- ================= MAIN CONTAINER ================= -->
+    <main class="app-container">
+
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">🤖 AI Financial Advisor & Monte Carlo Lab</h1>
+                <p class="page-subtitle">Multi-persona conversational coaching, probabilistic 12-month wealth projections, and anomaly detection.</p>
+            </div>
+        </div>
+
+        <!-- Health Score Top Banner -->
+        <div class="ai-health-banner" style="margin-bottom: 2rem;">
+            <div class="ai-health-left">
+                <div class="health-grade-badge" style="width: 72px; height: 72px; font-size: 2.2rem;">{{ analysis.grade }}</div>
+                <div>
+                    <span style="font-size: 0.78rem; font-weight: 700; color: var(--brand-primary); text-transform: uppercase;">Financial Health Grade</span>
+                    <h2 style="font-size: 1.5rem; font-weight: 800; margin-top: 0.15rem;">{{ analysis.verdict }} (Score: {{ analysis.score }}/100)</h2>
+                    <p style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                        Daily Burn: <strong>₹{{ "%.2f"|format(analysis.daily_avg|float) }}</strong> &bull; Month-End: <strong>₹{{ "%.2f"|format(analysis.projected_monthly|float) }}</strong>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Monte Carlo Wealth Projection Card -->
+        <div class="table-card" style="padding: 1.75rem; margin-bottom: 2rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.5rem;">
+                <div>
+                    <h3 style="font-weight: 800; font-size: 1.15rem;">🔮 Monte Carlo 12-Month Net Worth Simulation</h3>
+                    <p style="font-size: 0.85rem; color: var(--text-secondary);">100 stochastic simulation paths modeling expense volatility and asset compounding</p>
+                </div>
+                <div style="font-family: 'JetBrains Mono'; font-weight: 700; font-size: 1.1rem; color: var(--brand-primary);">
+                    12M Median: ₹{{ "%.0f"|format(monte_carlo.projected_median_12m) }}
+                </div>
+            </div>
+
+            <div class="chart-canvas-wrap" style="height: 320px;">
+                <canvas id="monteCarloChart"></canvas>
+            </div>
+        </div>
+
+        <!-- 2-Column Grid: AI Advisor Chat & Recommendations -->
+        <div class="insights-grid">
+
+            <!-- LEFT: AI Chat Window with Persona Switcher -->
+            <div>
+                <div class="ai-chat-window">
+                    <div class="chat-header">
+                        <div class="logo-icon" style="width: 32px; height: 32px; font-size: 1rem;">🤖</div>
+                        <div>
+                            <h4 style="font-weight: 700; font-size: 0.95rem;">Interactive AI Financial Advisor</h4>
+                            <p style="font-size: 0.78rem; color: var(--success-text);">● Online &bull; Select Persona Below</p>
+                        </div>
+                    </div>
+
+                    <!-- Persona Switcher -->
+                    <div style="padding: 0.75rem 1rem; border-bottom: 1px solid var(--border-subtle); background: var(--bg-surface-subtle);">
+                        <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 0.4rem; text-transform: uppercase;">
+                            Select AI Persona:
+                        </div>
+                        <div class="persona-switcher" style="margin-bottom: 0;">
+                            <div class="persona-chip active" data-persona="Finley">
+                                <span>🤖</span> Finley (Balanced Coach)
+                            </div>
+                            <div class="persona-chip" data-persona="Warren">
+                                <span>📈</span> Warren (Aggressive Investor)
+                            </div>
+                            <div class="persona-chip" data-persona="Penny">
+                                <span>🛡️</span> Penny (Frugal & Debt Hawk)
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Prompt Chips -->
+                    <div style="padding: 0.5rem 1rem; border-bottom: 1px solid var(--border-subtle); display: flex; flex-wrap: wrap; gap: 0.4rem; background: var(--bg-surface-subtle);">
+                        <button class="btn btn-secondary btn-sm ai-prompt-chip" style="font-size: 0.75rem;">"How can I cut ₹3,000 this month?"</button>
+                        <button class="btn btn-secondary btn-sm ai-prompt-chip" style="font-size: 0.75rem;">"Evaluate my investment potential"</button>
+                        <button class="btn btn-secondary btn-sm ai-prompt-chip" style="font-size: 0.75rem;">"Audit my Food and Dining spend"</button>
+                    </div>
+
+                    <!-- Chat Messages -->
+                    <div id="aiChatMessages" class="chat-messages">
+                        <div class="chat-bubble bubble-ai">
+                            👋 Hello! I am your AI Financial Advisor. I have full context of your financial records. Ask me anything about budgeting, savings, or investment allocation!
+                        </div>
+                    </div>
+
+                    <!-- Chat Input -->
+                    <div class="chat-input-bar">
+                        <input type="text" id="aiChatInput" class="form-input" placeholder="Ask your advisor a financial question..." autocomplete="off">
+                        <button id="aiChatSendBtn" class="btn btn-ai btn-sm">Send</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT: Cost Cutting Recommendations & Anomalies -->
+            <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                <div class="insight-card">
+                    <h3 style="font-size: 1.15rem; font-weight: 800; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                        <span>💡</span> Actionable Cost-Cutting Opportunities
+                    </h3>
+                    <div style="display: flex; flex-direction: column; gap: 1rem;">
+                        {% for rec in analysis.recommendations %}
+                        <div style="background: var(--bg-surface-subtle); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 1rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                                <span class="badge-category cat-{{ rec.category }}">{{ rec.category }}</span>
+                                <span style="font-size: 0.82rem; font-weight: 700; color: var(--success-text);">
+                                    Save ~₹{{ "%.0f"|format(rec.potential_savings) }}/mo
+                                </span>
+                            </div>
+                            <h4 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 0.25rem;">{{ rec.title }}</h4>
+                            <p style="font-size: 0.86rem; color: var(--text-secondary); line-height: 1.45;">{{ rec.detail }}</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                {% if analysis.anomalies %}
+                <div class="insight-card">
+                    <h3 style="font-size: 1.15rem; font-weight: 800; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
+                        <span>⚠️</span> High-Impact Transaction Alerts
+                    </h3>
+                    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                        {% for item in analysis.anomalies %}
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; background: var(--danger-light); border-radius: var(--radius-sm);">
+                            <div>
+                                <div style="font-weight: 700; font-size: 0.9rem; color: var(--danger-text);">
+                                    ₹{{ "%.2f"|format(item.amount) }} &bull; {{ item.description }}
+                                </div>
+                                <div style="font-size: 0.78rem; color: var(--text-muted);">
+                                    {{ item.date }} &bull; {{ item.category }}
+                                </div>
+                            </div>
+                            <span style="font-size: 0.78rem; font-weight: 700; color: var(--danger-text);">
+                                {{ item.multiplier }}x avg
+                            </span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Quick Add Modal -->
+    <div id="quickAddModal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 style="font-weight: 800;">⚡ AI Smart Quick-Add</h3>
+                <button class="close-modal-btn">&times;</button>
+            </div>
+            <div class="form-control" style="margin-bottom: 1rem;">
+                <input type="text" id="quickAddInput" class="form-input" placeholder="e.g. Spent 850 at Starbucks via UPI">
+            </div>
+            <div id="quickAddPreview" style="display: none; background: var(--bg-surface-subtle); padding: 0.85rem; border-radius: var(--radius-sm); margin-bottom: 1rem;"></div>
+            <button type="button" id="quickAddSubmitBtn" class="btn btn-ai" style="width: 100%;">⚡ Confirm & Add</button>
+        </div>
+    </div>
+
+    <!-- Monte Carlo Script -->
+    <script>
+        const mcLabels = {{ monte_carlo.labels | tojson }};
+        const p10 = {{ monte_carlo.p10_conservative | tojson }};
+        const p50 = {{ monte_carlo.p50_median | tojson }};
+        const p90 = {{ monte_carlo.p90_optimistic | tojson }};
+
+        window.renderMonteCarloChart = function() {
+            const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+            const textColor = isDark ? "#cbd5e1" : "#475569";
+            const gridColor = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
+
+            const ctx = document.getElementById("monteCarloChart");
+            if (ctx) {
+                new Chart(ctx, {
+                    type: "line",
+                    data: {
+                        labels: mcLabels,
+                        datasets: [
+                            {
+                                label: "Optimistic (90th percentile)",
+                                data: p90,
+                                borderColor: "#10b981",
+                                backgroundColor: "rgba(16, 185, 129, 0.08)",
+                                fill: true,
+                                tension: 0.3
+                            },
+                            {
+                                label: "Median Expected (50th percentile)",
+                                data: p50,
+                                borderColor: "#4f46e5",
+                                backgroundColor: "rgba(79, 70, 229, 0.12)",
+                                fill: true,
+                                borderWidth: 3,
+                                tension: 0.3
+                            },
+                            {
+                                label: "Conservative (10th percentile)",
+                                data: p10,
+                                borderColor: "#f59e0b",
+                                backgroundColor: "rgba(245, 158, 11, 0.08)",
+                                fill: true,
+                                tension: 0.3
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { labels: { color: textColor, font: { family: 'Plus Jakarta Sans' } } },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(ctx) { return `${ctx.dataset.label}: ₹${Number(ctx.parsed.y).toLocaleString('en-IN')}`; }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: { grid: { display: false }, ticks: { color: textColor } },
+                            y: { grid: { color: gridColor }, ticks: { color: textColor, callback: (v) => '₹' + v.toLocaleString() } }
+                        }
+                    }
+                });
+            }
+        };
+
+        document.addEventListener("DOMContentLoaded", window.renderMonteCarloChart);
+    </script>
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unified Financial Ledger - AI Expense Visualizer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+    <!-- ================= NAVBAR ================= -->
+    <header class="navbar">
+        <div class="brand-logo">
+            <div class="logo-icon">💰</div>
+            <span>AI Expense Visualizer</span>
+        </div>
+
+        <nav class="nav-links">
+            <a href="/" class="nav-link">📊 Dashboard</a>
+            <a href="/transactions" class="nav-link active">💳 Ledger</a>
+            <a href="/accounts" class="nav-link">🏦 Accounts</a>
+            <a href="/subscriptions" class="nav-link">🔄 Subscriptions</a>
+            <a href="/goals" class="nav-link">🎯 Goals</a>
+            <a href="/analytics" class="nav-link">📈 Analytics</a>
+            <a href="/ai-insights" class="nav-link">🤖 AI Advisor</a>
+        </nav>
+
+        <div class="nav-actions">
+            <button id="themeToggleBtn" class="theme-toggle-btn" title="Toggle Dark/Light Mode">🌙</button>
+            <button class="btn btn-ai btn-sm" data-modal-target="quickAddModal">⚡ AI Quick Add</button>
+            <a href="/add-expense" class="btn btn-primary btn-sm">+ Log Spend</a>
+        </div>
+    </header>
+
+    <!-- ================= MAIN CONTAINER ================= -->
+    <main class="app-container">
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-alert flash-{{ category }}">
+                        <span>{{ "✅" if category == "success" else "⚠️" }}</span>
+                        <span>{{ message }}</span>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Page Header -->
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">Unified Financial Ledger</h1>
+                <p class="page-subtitle">Track income deposits, expense outflows, and account transfers in one real-time ledger.</p>
+            </div>
+
+            <div class="header-action-group">
+                <a href="/api/export/csv" class="btn btn-secondary btn-sm">📥 Export CSV</a>
+                <a href="/import" class="btn btn-secondary btn-sm">📁 Import Statement</a>
+                <a href="/add-expense" class="btn btn-primary btn-sm">+ Add Transaction</a>
+            </div>
+        </div>
+
+        <!-- Ledger Summary Metrics -->
+        <div class="metrics-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 1.5rem;">
+            <div class="metric-card" style="padding: 1rem 1.25rem;">
+                <div class="metric-label" style="color: var(--success-text);">Total Inflow (Income)</div>
+                <div class="metric-value" style="color: var(--success-text); font-size: 1.5rem;">
+                    +₹{{ "%.2f"|format(total_income) }}
+                </div>
+            </div>
+            <div class="metric-card" style="padding: 1rem 1.25rem;">
+                <div class="metric-label" style="color: var(--danger-text);">Total Outflow (Expenses)</div>
+                <div class="metric-value" style="color: var(--danger-text); font-size: 1.5rem;">
+                    -₹{{ "%.2f"|format(total_expense) }}
+                </div>
+            </div>
+            <div class="metric-card" style="padding: 1rem 1.25rem;">
+                <div class="metric-label">Net Cash Flow</div>
+                <div class="metric-value" style="font-size: 1.5rem; color: {{ 'var(--success-text)' if net_flow >= 0 else 'var(--danger-text)' }};">
+                    {{ '+' if net_flow >= 0 else '' }}₹{{ "%.2f"|format(net_flow) }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter Toolbar -->
+        <div class="filter-card">
+            <form action="/transactions" method="GET" class="filter-form-grid" style="grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr auto;">
+                <div class="form-control">
+                    <label for="search">Keywords / Notes</label>
+                    <input type="text" name="search" id="search" class="form-input" placeholder="Search merchant, tag, notes..." value="{{ search }}">
+                </div>
+
+                <div class="form-control">
+                    <label for="type">Type</label>
+                    <select name="type" id="type" class="form-select">
+                        <option value="all">All Types</option>
+                        <option value="expense" {% if selected_type == 'expense' %}selected{% endif %}>💸 Expense</option>
+                        <option value="income" {% if selected_type == 'income' %}selected{% endif %}>💰 Income</option>
+                        <option value="transfer" {% if selected_type == 'transfer' %}selected{% endif %}>🔄 Transfer</option>
+                    </select>
+                </div>
+
+                <div class="form-control">
+                    <label for="category">Category</label>
+                    <select name="category" id="category" class="form-select">
+                        <option value="all">All Categories</option>
+                        <optgroup label="Expenses">
+                            {% for cat in categories %}
+                            <option value="{{ cat }}" {% if selected_category == cat %}selected{% endif %}>{{ cat }}</option>
+                            {% endfor %}
+                        </optgroup>
+                        <optgroup label="Income">
+                            {% for cat in income_categories %}
+                            <option value="{{ cat }}" {% if selected_category == cat %}selected{% endif %}>{{ cat }}</option>
+                            {% endfor %}
+                        </optgroup>
+                    </select>
+                </div>
+
+                <div class="form-control">
+                    <label for="account_id">Account</label>
+                    <select name="account_id" id="account_id" class="form-select">
+                        <option value="all">All Accounts</option>
+                        {% for acc in accounts %}
+                        <option value="{{ acc.id }}" {% if selected_account == (acc.id|string) %}selected{% endif %}>{{ acc.icon }} {{ acc.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-control">
+                    <label for="start_date">From Date</label>
+                    <input type="date" name="start_date" id="start_date" class="form-input" value="{{ start_date }}">
+                </div>
+
+                <div class="form-control">
+                    <label for="end_date">To Date</label>
+                    <input type="date" name="end_date" id="end_date" class="form-input" value="{{ end_date }}">
+                </div>
+
+                <div style="display: flex; gap: 0.5rem;">
+                    <button type="submit" class="btn btn-primary btn-sm" style="height: 38px;">Filter</button>
+                    <a href="/transactions" class="btn btn-secondary btn-sm" style="height: 38px;">Reset</a>
+                </div>
+            </form>
+        </div>
+
+        <!-- Ledger Table Card -->
+        <div class="table-card">
+            <div class="table-header-bar">
+                <div style="font-weight: 600; color: var(--text-secondary);">
+                    Showing <strong>{{ transactions|length }}</strong> ledger entries
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                {% if transactions %}
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Category</th>
+                            <th>Description</th>
+                            <th>Account / Method</th>
+                            <th>Amount</th>
+                            <th style="text-align: right;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tx in transactions %}
+                        <tr>
+                            <td>{{ tx.transaction_date }}</td>
+                            <td>
+                                {% if tx.type == 'income' %}
+                                <span class="badge-category cat-Salary">💰 Income</span>
+                                {% elif tx.type == 'transfer' %}
+                                <span class="badge-payment">🔄 Transfer</span>
+                                {% else %}
+                                <span class="badge-category cat-Health">💸 Expense</span>
+                                {% endif %}
+                            </td>
+                            <td><span class="badge-category cat-{{ tx.category }}">{{ tx.category }}</span></td>
+                            <td>{{ tx.description or "-" }}</td>
+                            <td>
+                                {% if tx.account_name %}
+                                <span class="badge-payment">{{ tx.account_icon }} {{ tx.account_name }}</span>
+                                {% else %}
+                                <span class="badge-payment">{{ tx.payment_method or "UPI" }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="amount-cell" style="color: {{ 'var(--success-text)' if tx.type == 'income' else ('inherit' if tx.type == 'transfer' else 'var(--text-primary)') }};">
+                                {{ '+' if tx.type == 'income' else ('-' if tx.type == 'expense' else '') }}₹{{ "%.2f"|format(tx.amount|float) }}
+                            </td>
+                            <td style="text-align: right;">
+                                <form action="/delete-expense/{{ tx.id }}" method="POST" style="display:inline;" onsubmit="return confirm('Delete this ledger record?');">
+                                    <button type="submit" class="btn btn-danger btn-sm" style="padding: 0.2rem 0.5rem;">🗑️ Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div style="padding: 4rem 2rem; text-align: center; color: var(--text-muted);">
+                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔍</div>
+                    <h3 style="color: var(--text-primary);">No transactions found</h3>
+                    <p style="font-size: 0.9rem;">Adjust filters or add a new transaction.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+    </main>
+
+    <!-- AI Quick Add Modal -->
+    <div id="quickAddModal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 style="font-weight: 800;">⚡ AI Smart Quick-Add</h3>
+                <button class="close-modal-btn">&times;</button>
+            </div>
+            <div class="form-control" style="margin-bottom: 1rem;">
+                <input type="text" id="quickAddInput" class="form-input" placeholder="e.g. 450 lunch at subway via UPI">
+            </div>
+            <div id="quickAddPreview" style="display: none; background: var(--bg-surface-subtle); padding: 0.85rem; border-radius: var(--radius-sm); margin-bottom: 1rem;"></div>
+            <button type="button" id="quickAddSubmitBtn" class="btn btn-ai" style="width: 100%;">⚡ Confirm & Add</button>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

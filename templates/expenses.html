@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expense History - AI Expense Visualizer</title>
+
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+    <!-- ================= NAVBAR ================= -->
+    <header class="navbar">
+        <div class="brand-logo">
+            <div class="logo-icon">💰</div>
+            <span>AI Expense Visualizer</span>
+        </div>
+
+        <nav class="nav-links">
+            <a href="/" class="nav-link">📊 Dashboard</a>
+            <a href="/expenses" class="nav-link active">💳 Expenses</a>
+            <a href="/ai-insights" class="nav-link">🤖 AI Insights</a>
+        </nav>
+
+        <div class="nav-actions">
+            <button id="themeToggleBtn" class="theme-toggle-btn" title="Toggle Dark/Light Mode">🌙</button>
+            <button class="btn btn-ai btn-sm" data-modal-target="quickAddModal">⚡ AI Quick Add</button>
+            <a href="/add-expense" class="btn btn-primary btn-sm">+ Add</a>
+        </div>
+    </header>
+
+    <!-- ================= MAIN CONTAINER ================= -->
+    <main class="app-container">
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-alert flash-{{ category }}">
+                        <span>{{ "✅" if category == "success" else "⚠️" }}</span>
+                        <span>{{ message }}</span>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Page Header -->
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">Expense Explorer</h1>
+                <p class="page-subtitle">Search, filter, categorize, and export your transaction records.</p>
+            </div>
+
+            <div class="header-action-group">
+                <a href="/api/export/csv?search={{ search }}&category={{ selected_category }}&payment={{ selected_payment }}&start_date={{ start_date }}&end_date={{ end_date }}" class="btn btn-secondary btn-sm">
+                    📥 Export CSV
+                </a>
+                <button class="btn btn-ai btn-sm" data-modal-target="quickAddModal">⚡ AI Quick Add</button>
+                <a href="/add-expense" class="btn btn-primary btn-sm">+ Add Expense</a>
+            </div>
+        </div>
+
+        <!-- ================= FILTER & SEARCH TOOLBAR ================= -->
+        <div class="filter-card">
+            <form action="/expenses" method="GET" class="filter-form-grid">
+                <div class="form-control">
+                    <label for="search">Search Keywords</label>
+                    <input type="text" name="search" id="search" class="form-input" placeholder="Search merchant, notes, category..." value="{{ search }}">
+                </div>
+
+                <div class="form-control">
+                    <label for="category">Category</label>
+                    <select name="category" id="category" class="form-select">
+                        <option value="all">All Categories</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat }}" {% if selected_category == cat %}selected{% endif %}>{{ cat }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-control">
+                    <label for="payment">Payment Method</label>
+                    <select name="payment" id="payment" class="form-select">
+                        <option value="all">All Methods</option>
+                        {% for pm in payment_methods %}
+                        <option value="{{ pm }}" {% if selected_payment == pm %}selected{% endif %}>{{ pm }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-control">
+                    <label for="start_date">From Date</label>
+                    <input type="date" name="start_date" id="start_date" class="form-input" value="{{ start_date }}">
+                </div>
+
+                <div class="form-control">
+                    <label for="end_date">To Date</label>
+                    <input type="date" name="end_date" id="end_date" class="form-input" value="{{ end_date }}">
+                </div>
+
+                <div style="display: flex; gap: 0.5rem;">
+                    <button type="submit" class="btn btn-primary btn-sm" style="height: 38px;">Filter</button>
+                    <a href="/expenses" class="btn btn-secondary btn-sm" style="height: 38px;">Reset</a>
+                </div>
+            </form>
+        </div>
+
+        <!-- ================= EXPENSES TABLE CARD ================= -->
+        <div class="table-card">
+            <div class="table-header-bar">
+                <div style="font-weight: 600; color: var(--text-secondary); font-size: 0.92rem;">
+                    Showing <strong>{{ expenses|length }}</strong> transactions totaling <strong style="color: var(--text-primary);">₹{{ "%.2f"|format(filtered_total|float) }}</strong>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                {% if expenses %}
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Category</th>
+                            <th>Description</th>
+                            <th>Payment Method</th>
+                            <th>Amount</th>
+                            <th style="text-align: right;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for expense in expenses %}
+                        <tr>
+                            <td>{{ expense.expense_date }}</td>
+                            <td><span class="badge-category cat-{{ expense.category }}">{{ expense.category }}</span></td>
+                            <td>{{ expense.description or "-" }}</td>
+                            <td><span class="badge-payment">{{ expense.payment_method or "UPI" }}</span></td>
+                            <td class="amount-cell">₹{{ "%.2f"|format(expense.amount|float) }}</td>
+                            <td style="text-align: right; white-space: nowrap;">
+                                <a href="/edit-expense/{{ expense.id }}" class="btn btn-secondary btn-sm" style="padding: 0.25rem 0.5rem; margin-right: 0.3rem;">✏️ Edit</a>
+                                <form action="/delete-expense/{{ expense.id }}" method="POST" style="display:inline;" onsubmit="return confirm('Delete this expense record?');">
+                                    <button type="submit" class="btn btn-danger btn-sm" style="padding: 0.25rem 0.5rem;">🗑️ Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div style="padding: 4rem 2rem; text-align: center; color: var(--text-muted);">
+                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔍</div>
+                    <h3 style="color: var(--text-primary); margin-bottom: 0.5rem;">No matching expenses found</h3>
+                    <p style="font-size: 0.9rem;">Try adjusting your search criteria or date filters.</p>
+                    <a href="/expenses" class="btn btn-secondary btn-sm" style="margin-top: 1rem;">Clear Filters</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+    </main>
+
+    <!-- ================= AI QUICK-ADD MODAL ================= -->
+    <div id="quickAddModal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 style="font-weight: 800; display: flex; align-items: center; gap: 0.5rem;">
+                    <span>⚡</span> AI Smart Quick-Add
+                </h3>
+                <button class="close-modal-btn">&times;</button>
+            </div>
+            <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1rem;">
+                Enter expense in natural plain text.
+            </p>
+
+            <div class="form-control" style="margin-bottom: 1rem;">
+                <input type="text" id="quickAddInput" class="form-input" placeholder="e.g. Spent ₹450 on food with UPI today" autocomplete="off">
+            </div>
+
+            <div id="quickAddPreview" style="display: none; background: var(--bg-surface-subtle); padding: 0.85rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); margin-bottom: 1.25rem;"></div>
+
+            <div style="display: flex; gap: 0.75rem;">
+                <button type="button" id="quickAddParseBtn" class="btn btn-secondary" style="flex: 1;">Preview</button>
+                <button type="button" id="quickAddSubmitBtn" class="btn btn-ai" style="flex: 2;">⚡ Confirm & Add</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main JavaScript -->
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

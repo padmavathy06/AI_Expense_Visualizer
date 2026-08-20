@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bank Statement CSV Importer - AI Expense Visualizer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+    <!-- ================= NAVBAR ================= -->
+    <header class="navbar">
+        <div class="brand-logo">
+            <div class="logo-icon">💰</div>
+            <span>AI Expense Visualizer</span>
+        </div>
+
+        <nav class="nav-links">
+            <a href="/" class="nav-link">📊 Dashboard</a>
+            <a href="/transactions" class="nav-link">💳 Ledger</a>
+            <a href="/accounts" class="nav-link">🏦 Accounts</a>
+            <a href="/subscriptions" class="nav-link">🔄 Subscriptions</a>
+            <a href="/goals" class="nav-link">🎯 Goals</a>
+            <a href="/analytics" class="nav-link">📈 Analytics</a>
+            <a href="/ai-insights" class="nav-link">🤖 AI Advisor</a>
+        </nav>
+
+        <div class="nav-actions">
+            <button id="themeToggleBtn" class="theme-toggle-btn" title="Toggle Dark/Light Mode">🌙</button>
+            <a href="/transactions" class="btn btn-secondary btn-sm">&larr; Back to Ledger</a>
+        </div>
+    </header>
+
+    <!-- ================= MAIN CONTAINER ================= -->
+    <main class="app-container" style="max-width: 720px;">
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-alert flash-{{ category }}">
+                        <span>{{ "✅" if category == "success" else "⚠️" }}</span>
+                        <span>{{ message }}</span>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="table-card" style="padding: 2.25rem;">
+            <div style="margin-bottom: 1.75rem;">
+                <h1 style="font-size: 1.6rem; font-weight: 800;">📥 Smart Bank Statement CSV Importer</h1>
+                <p style="font-size: 0.92rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                    Upload exported CSV statements from HDFC, SBI, ICICI, Axis, Chase, Amex, or any standard spreadsheet.
+                    Our AI automatically detects columns and categorizes transactions.
+                </p>
+            </div>
+
+            <form action="/import" method="POST" enctype="multipart/form-data">
+
+                <div class="form-control" style="margin-bottom: 1.25rem;">
+                    <label for="acc_select">Link to Account (Optional)</label>
+                    <select name="account_id" id="acc_select" class="form-select">
+                        <option value="">-- No Account Linked --</option>
+                        {% for acc in accounts %}
+                        <option value="{{ acc.id }}">{{ acc.icon }} {{ acc.name }} ({{ acc.type }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-control" style="margin-bottom: 1.5rem;">
+                    <label>Select CSV Statement File *</label>
+                    <div id="csvDropZone" style="border: 2px dashed var(--border-strong); border-radius: var(--radius-md); padding: 2.5rem 1.5rem; text-align: center; cursor: pointer; background: var(--bg-surface-subtle); transition: var(--transition);">
+                        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📄</div>
+                        <p style="font-weight: 700; color: var(--text-primary);">Click to select or drag & drop bank CSV</p>
+                        <p id="csvFileName" style="font-size: 0.85rem; color: var(--brand-primary); margin-top: 0.35rem;">Supports .csv files</p>
+                        <input type="file" id="statementFile" name="statement_file" accept=".csv" style="display: none;" required>
+                    </div>
+                </div>
+
+                <div style="background: var(--bg-surface-subtle); padding: 1rem 1.25rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); margin-bottom: 1.5rem;">
+                    <h4 style="font-size: 0.88rem; font-weight: 700; margin-bottom: 0.35rem;">Supported Formats:</h4>
+                    <p style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.45;">
+                        Standard CSV files containing <strong>Date</strong>, <strong>Description / Narration</strong>, and <strong>Amount</strong> (or Debit / Credit) columns.
+                    </p>
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="width: 100%; padding: 0.85rem;">
+                    ⚡ Upload & Auto-Categorize Transactions
+                </button>
+            </form>
+        </div>
+
+    </main>
+
+    <script>
+        const dropZone = document.getElementById("csvDropZone");
+        const fileInput = document.getElementById("statementFile");
+        const fileName = document.getElementById("csvFileName");
+
+        dropZone.addEventListener("click", () => fileInput.click());
+
+        fileInput.addEventListener("change", () => {
+            if (fileInput.files.length > 0) {
+                fileName.textContent = `Selected: ${fileInput.files[0].name}`;
+                dropZone.style.borderColor = "var(--brand-primary)";
+            }
+        });
+    </script>
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

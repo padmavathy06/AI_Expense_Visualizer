@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Financial Goals & Piggy Banks - AI Expense Visualizer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+    <!-- ================= NAVBAR ================= -->
+    <header class="navbar">
+        <div class="brand-logo">
+            <div class="logo-icon">💰</div>
+            <span>AI Expense Visualizer</span>
+        </div>
+
+        <nav class="nav-links">
+            <a href="/" class="nav-link">📊 Dashboard</a>
+            <a href="/transactions" class="nav-link">💳 Ledger</a>
+            <a href="/accounts" class="nav-link">🏦 Accounts</a>
+            <a href="/subscriptions" class="nav-link">🔄 Subscriptions</a>
+            <a href="/goals" class="nav-link active">🎯 Goals</a>
+            <a href="/analytics" class="nav-link">📈 Analytics</a>
+            <a href="/ai-insights" class="nav-link">🤖 AI Advisor</a>
+        </nav>
+
+        <div class="nav-actions">
+            <button id="themeToggleBtn" class="theme-toggle-btn" title="Toggle Dark/Light Mode">🌙</button>
+            <button class="btn btn-primary btn-sm" data-modal-target="createGoalModal">+ New Goal</button>
+        </div>
+    </header>
+
+    <!-- ================= MAIN CONTAINER ================= -->
+    <main class="app-container">
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-alert flash-{{ category }}">
+                        <span>{{ "✅" if category == "success" else "⚠️" }}</span>
+                        <span>{{ message }}</span>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="page-header">
+            <div>
+                <h1 class="page-title">🎯 Financial Goals & Savings Pots</h1>
+                <p class="page-subtitle">Allocate savings toward target milestones, emergency funds, and long-term dream purchases.</p>
+            </div>
+            <div class="header-action-group">
+                <button class="btn btn-primary btn-sm" data-modal-target="createGoalModal">+ Create Goal</button>
+            </div>
+        </div>
+
+        <!-- Goals Summary Banner -->
+        <section class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-card-top">
+                    <span class="metric-label">Total Capital Saved</span>
+                    <div class="metric-icon-wrap icon-emerald">💰</div>
+                </div>
+                <div class="metric-value">₹{{ "%.2f"|format(total_saved) }}</div>
+                <div class="metric-subtitle">
+                    <span>{{ overall_pct }}% of all targets achieved</span>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-card-top">
+                    <span class="metric-label">Total Milestone Target</span>
+                    <div class="metric-icon-wrap icon-purple">🎯</div>
+                </div>
+                <div class="metric-value">₹{{ "%.2f"|format(total_target) }}</div>
+                <div class="metric-subtitle">
+                    <span>Remaining: ₹{{ "%.0f"|format(total_target - total_saved) }}</span>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-card-top">
+                    <span class="metric-label">Active Savings Pots</span>
+                    <div class="metric-icon-wrap icon-cyan">🛡️</div>
+                </div>
+                <div class="metric-value">{{ goals|length }}</div>
+                <div class="metric-subtitle">
+                    <span>Tracked milestone goals</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Goals Grid -->
+        <div class="goals-grid">
+            {% for goal in goals %}
+            <div class="goal-card" style="border-top: 4px solid {{ goal.color or 'var(--brand-primary)' }};">
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
+                        <div style="font-size: 1.8rem;">{{ goal.icon or '🎯' }}</div>
+                        <span class="badge-category cat-{{ 'Education' if goal.is_completed else 'Shopping' }}">
+                            {{ '✅ Completed' if goal.is_completed else goal.percentage ~ '% Saved' }}
+                        </span>
+                    </div>
+
+                    <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary);">
+                        {{ goal.title }}
+                    </h3>
+
+                    <div style="font-family: 'JetBrains Mono'; font-weight: 700; font-size: 1.4rem; margin: 0.35rem 0 0.5rem;">
+                        ₹{{ "%.2f"|format(goal.current_amount) }}
+                        <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: normal;">/ ₹{{ "%.0f"|format(goal.target_amount) }}</span>
+                    </div>
+
+                    <div class="progress-bar-container" style="height: 10px;">
+                        <div class="progress-bar-fill progress-success" style="width: {{ goal.percentage }}%;"></div>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--text-muted); margin-top: 0.5rem;">
+                        <span>Target: {{ goal.target_date }}</span>
+                        <span>{{ goal.days_remaining }} days remaining</span>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 0.5rem; margin-top: 1.25rem;">
+                    <button class="btn btn-secondary btn-sm" style="flex: 1;" onclick="openDepositModal({{ goal.id }}, '{{ goal.title }}')">
+                        + Deposit Money
+                    </button>
+                    <form action="/api/goals/delete/{{ goal.id }}" method="POST" onsubmit="return confirm('Delete this savings goal?');">
+                        <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+    </main>
+
+    <!-- Create Goal Modal -->
+    <div id="createGoalModal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 style="font-weight: 800;">🎯 Create Financial Savings Goal</h3>
+                <button class="close-modal-btn">&times;</button>
+            </div>
+            <form action="/api/goals/create" method="POST">
+                <div class="form-control" style="margin-bottom: 1rem;">
+                    <label for="g_title">Goal Title *</label>
+                    <input type="text" name="title" id="g_title" class="form-input" placeholder="e.g. Emergency Fund, New Laptop, Vacation" required>
+                </div>
+                <div class="form-control" style="margin-bottom: 1rem;">
+                    <label for="g_target">Target Goal Amount (₹) *</label>
+                    <input type="number" name="target_amount" id="g_target" class="form-input" min="100" step="100" placeholder="e.g. 100000" required>
+                </div>
+                <div class="form-control" style="margin-bottom: 1rem;">
+                    <label for="g_current">Starting Balance Already Saved (₹)</label>
+                    <input type="number" name="current_amount" id="g_current" class="form-input" step="100" value="0.00">
+                </div>
+                <div class="form-control" style="margin-bottom: 1rem;">
+                    <label for="g_date">Target Completion Date *</label>
+                    <input type="date" name="target_date" id="g_date" class="form-input" required>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Create Savings Pot</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Deposit Modal -->
+    <div id="depositGoalModal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 style="font-weight: 800;" id="depositModalTitle">Deposit towards Goal</h3>
+                <button class="close-modal-btn">&times;</button>
+            </div>
+            <form id="depositGoalForm" method="POST">
+                <div class="form-control" style="margin-bottom: 1rem;">
+                    <label for="dep_from">Fund from Account</label>
+                    <select name="account_id" id="dep_from" class="form-select">
+                        {% for acc in accounts %}
+                        <option value="{{ acc.id }}">{{ acc.icon }} {{ acc.name }} (₹{{ "%.2f"|format(acc.balance) }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-control" style="margin-bottom: 1.25rem;">
+                    <label for="dep_amt">Deposit Amount (₹) *</label>
+                    <input type="number" name="amount" id="dep_amt" class="form-input" min="1" step="100" placeholder="0.00" required>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Deposit Funds</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function openDepositModal(goalId, goalTitle) {
+            document.getElementById("depositModalTitle").textContent = `Deposit towards "${goalTitle}"`;
+            document.getElementById("depositGoalForm").action = `/api/goals/contribute/${goalId}`;
+            document.getElementById("depositGoalModal").classList.add("active");
+        }
+    </script>
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
