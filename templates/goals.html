@@ -151,11 +151,11 @@
                 </div>
                 <div class="form-control" style="margin-bottom: 1rem;">
                     <label for="g_target">Target Goal Amount (₹) *</label>
-                    <input type="number" name="target_amount" id="g_target" class="form-input" min="100" step="100" placeholder="e.g. 100000" required>
+                    <input type="number" name="target_amount" id="g_target" class="form-input" min="0" step="any" placeholder="e.g. 100000" required>
                 </div>
                 <div class="form-control" style="margin-bottom: 1rem;">
                     <label for="g_current">Starting Balance Already Saved (₹)</label>
-                    <input type="number" name="current_amount" id="g_current" class="form-input" step="100" value="0.00">
+                    <input type="number" name="current_amount" id="g_current" class="form-input" min="0" step="any" value="0.00">
                 </div>
                 <div class="form-control" style="margin-bottom: 1rem;">
                     <label for="g_date">Target Completion Date *</label>
@@ -184,7 +184,7 @@
                 </div>
                 <div class="form-control" style="margin-bottom: 1.25rem;">
                     <label for="dep_amt">Deposit Amount (₹) *</label>
-                    <input type="number" name="amount" id="dep_amt" class="form-input" min="1" step="100" placeholder="0.00" required>
+                    <input type="number" name="amount" id="dep_amt" class="form-input" min="0" step="any" placeholder="0.00" required>
                 </div>
                 <button type="submit" class="btn btn-primary" style="width: 100%;">Deposit Funds</button>
             </form>

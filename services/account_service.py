@@ -167,15 +167,20 @@ def get_net_worth_summary():
 
 
 def seed_default_accounts():
-    """Initializes standard starter accounts if none exist."""
-    accounts = get_all_accounts()
-    if not accounts:
-        defaults = [
-            ("HDFC Salary Account", "Bank", 45000.00, "INR", 0.0, 1, "#4f46e5", "🏦"),
-            ("ICICI Amazon Pay Card", "Credit Card", 4250.00, "INR", 150000.0, 15, "#f43f5e", "💳"),
-            ("Paytm UPI Wallet", "Wallet", 3200.00, "INR", 0.0, 1, "#06b6d4", "📱"),
-            ("Emergency Cash", "Cash", 5000.00, "INR", 0.0, 1, "#10b981", "💵"),
-            ("Zerodha Mutual Funds", "Investment", 120000.00, "INR", 0.0, 1, "#8b5cf6", "📈")
-        ]
-        for name, atype, bal, curr, limit, day, color, icon in defaults:
-            create_account(name, atype, bal, curr, limit, day, color, icon)
+    """Initializes standard starter accounts with realistic demo balances."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM accounts")
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    defaults = [
+        ("HDFC Salary Account", "Bank", 45000.00, "INR", 0.0, 1, "#4f46e5", "🏦"),
+        ("ICICI Amazon Pay Card", "Credit Card", 4250.00, "INR", 150000.0, 15, "#f43f5e", "💳"),
+        ("Paytm UPI Wallet", "Wallet", 3200.00, "INR", 0.0, 1, "#06b6d4", "📱"),
+        ("Emergency Cash", "Cash", 5000.00, "INR", 0.0, 1, "#10b981", "💵"),
+        ("Zerodha Mutual Funds", "Investment", 120000.00, "INR", 0.0, 1, "#8b5cf6", "📈")
+    ]
+    for name, atype, bal, curr, limit, day, color, icon in defaults:
+        create_account(name, atype, bal, curr, limit, day, color, icon)

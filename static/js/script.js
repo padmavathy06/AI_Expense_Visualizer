@@ -8,6 +8,8 @@ document.addEventListener("DOMContentLoaded", () => {
     ensureUniversalQuickAddModal();
     initModals();
     initAiQuickAdd();
+    initInPageQuickAdd();
+    initBulkSelection();
     initReceiptScanner();
     initAiChat();
     initGlobalHotkeys();
@@ -449,3 +451,130 @@ function initAiChat() {
         }
     });
 }
+
+/* ==========================================================================
+   9. IN-PAGE INSTANT QUICK-ADD
+   ========================================================================== */
+
+function initInPageQuickAdd() {
+    const input = document.getElementById("inPageQuickInput");
+    const btn = document.getElementById("inPageQuickBtn");
+    const preview = document.getElementById("inPageQuickPreview");
+
+    if (!input || !btn) return;
+
+    let debounceTimer = null;
+
+    input.addEventListener("input", () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(async () => {
+            const text = input.value.trim();
+            if (!text) {
+                if (preview) preview.style.display = "none";
+                return;
+            }
+
+            try {
+                const res = await fetch("/api/ai/quick-parse", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ text })
+                });
+                const data = await res.json();
+                if (data && data.amount > 0 && preview) {
+                    preview.style.display = "block";
+                    preview.innerHTML = `
+                        ✨ <strong>Detected:</strong> ₹${data.amount.toFixed(2)} &bull;
+                        <span class="badge-category cat-${data.category}">${data.category}</span> &bull;
+                        <span>${data.payment_method}</span> &bull;
+                        <span>${data.description}</span>
+                    `;
+                }
+            } catch (e) {}
+        }, 250);
+    });
+
+    async function handleInPageSubmit() {
+        const text = input.value.trim();
+        if (!text) {
+            showToast("Type an expense first (e.g. '450 lunch')", "error");
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = "+ Adding...";
+
+        try {
+            const res = await fetch("/api/ai/quick-add", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text })
+            });
+            const result = await res.json();
+
+            if (result && result.success) {
+                showToast(`Logged ₹${result.expense.amount} for ${result.expense.category}!`, "success");
+                input.value = "";
+                if (preview) preview.style.display = "none";
+                setTimeout(() => window.location.reload(), 500);
+            } else {
+                showToast(result.error || "Could not extract expense amount.", "error");
+            }
+        } catch (e) {
+            showToast("Error logging expense.", "error");
+        } finally {
+            btn.disabled = false;
+            btn.textContent = "+ Add";
+        }
+    }
+
+    btn.addEventListener("click", handleInPageSubmit);
+    input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            handleInPageSubmit();
+        }
+    });
+}
+
+/* ==========================================================================
+   10. BULK CHECKBOX SELECTION
+   ========================================================================== */
+
+function initBulkSelection() {
+    const selectAll = document.getElementById("selectAllCheckbox");
+    const rowCheckboxes = document.querySelectorAll(".row-checkbox");
+    const bulkBar = document.getElementById("bulkActionBar");
+    const countText = document.getElementById("selectedCountText");
+
+    if (!selectAll || rowCheckboxes.length === 0) return;
+
+    function updateBulkBar() {
+        const checkedBoxes = document.querySelectorAll(".row-checkbox:checked");
+        const count = checkedBoxes.length;
+
+        if (bulkBar && countText) {
+            if (count > 0) {
+                bulkBar.style.display = "flex";
+                countText.textContent = `${count} expense${count > 1 ? 's' : ''} selected`;
+            } else {
+                bulkBar.style.display = "none";
+            }
+        }
+
+        selectAll.checked = (count === rowCheckboxes.length && count > 0);
+        selectAll.indeterminate = (count > 0 && count < rowCheckboxes.length);
+    }
+
+    selectAll.addEventListener("change", () => {
+        rowCheckboxes.forEach(cb => {
+            cb.checked = selectAll.checked;
+        });
+        updateBulkBar();
+    });
+
+    rowCheckboxes.forEach(cb => {
+        cb.addEventListener("change", updateBulkBar);
+    });
+}
+

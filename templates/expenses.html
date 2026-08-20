@@ -1,11 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Expense History - AI Expense Visualizer</title>
-
-    <!-- Stylesheet -->
+    <title>All Expenses & Month Filter - AI Expense Visualizer</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
@@ -18,15 +16,15 @@
         </div>
 
         <nav class="nav-links">
-            <a href="/" class="nav-link">📊 Dashboard</a>
-            <a href="/expenses" class="nav-link active">💳 Expenses</a>
+            <a href="/" class="nav-link">📊 Monthly Dashboard</a>
+            <a href="/expenses" class="nav-link active">💳 All Expenses</a>
             <a href="/ai-insights" class="nav-link">🤖 AI Insights</a>
         </nav>
 
         <div class="nav-actions">
-            <button id="themeToggleBtn" class="theme-toggle-btn" title="Toggle Dark/Light Mode">🌙</button>
+            <button id="themeToggleBtn" class="theme-toggle-btn" title="Toggle Dark/Light Mode">☀️</button>
             <button class="btn btn-ai btn-sm" data-modal-target="quickAddModal">⚡ AI Quick Add</button>
-            <a href="/add-expense" class="btn btn-primary btn-sm">+ Add</a>
+            <a href="/add-expense" class="btn btn-primary btn-sm">+ Add Expense</a>
         </div>
     </header>
 
@@ -48,25 +46,37 @@
         <!-- Page Header -->
         <div class="page-header">
             <div>
-                <h1 class="page-title">Expense Explorer</h1>
-                <p class="page-subtitle">Search, filter, categorize, and export your transaction records.</p>
+                <h1 class="page-title">💳 Expenses Explorer</h1>
+                <p class="page-subtitle">View, search, filter, and manage your expenses month-by-month.</p>
             </div>
 
             <div class="header-action-group">
-                <a href="/api/export/csv?search={{ search }}&category={{ selected_category }}&payment={{ selected_payment }}&start_date={{ start_date }}&end_date={{ end_date }}" class="btn btn-secondary btn-sm">
-                    📥 Export CSV
-                </a>
-                <button class="btn btn-ai btn-sm" data-modal-target="quickAddModal">⚡ AI Quick Add</button>
-                <a href="/add-expense" class="btn btn-primary btn-sm">+ Add Expense</a>
+                <a href="/api/export/csv?month={{ selected_month }}" class="btn btn-secondary btn-sm">📥 Export CSV</a>
+                <button class="btn btn-danger btn-sm" data-modal-target="deleteAllModal">🗑️ Delete All Expenses</button>
+                <a href="/add-expense" class="btn btn-primary btn-sm">+ Log New Expense</a>
             </div>
         </div>
 
-        <!-- ================= FILTER & SEARCH TOOLBAR ================= -->
+        <!-- Month Filter Tabs -->
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; overflow-x: auto; padding-bottom: 0.35rem;">
+            <a href="/expenses?month=all" class="btn {% if selected_month == 'all' %}btn-primary{% else %}btn-secondary{% endif %} btn-sm">
+                🗓️ All Months
+            </a>
+            {% for m in available_months %}
+            <a href="/expenses?month={{ m.key }}" class="btn {% if selected_month == m.key %}btn-primary{% else %}btn-secondary{% endif %} btn-sm">
+                {{ m.label }}
+            </a>
+            {% endfor %}
+        </div>
+
+        <!-- Filter Toolbar -->
         <div class="filter-card">
-            <form action="/expenses" method="GET" class="filter-form-grid">
+            <form action="/expenses" method="GET" class="filter-form-grid" style="grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto;">
+                <input type="hidden" name="month" value="{{ selected_month }}">
+
                 <div class="form-control">
-                    <label for="search">Search Keywords</label>
-                    <input type="text" name="search" id="search" class="form-input" placeholder="Search merchant, notes, category..." value="{{ search }}">
+                    <label for="search">Keyword / Note</label>
+                    <input type="text" name="search" id="search" class="form-input" placeholder="Search item, merchant..." value="{{ search }}">
                 </div>
 
                 <div class="form-control">
@@ -99,92 +109,123 @@
                     <input type="date" name="end_date" id="end_date" class="form-input" value="{{ end_date }}">
                 </div>
 
-                <div style="display: flex; gap: 0.5rem;">
+                <div style="display: flex; gap: 0.4rem;">
                     <button type="submit" class="btn btn-primary btn-sm" style="height: 38px;">Filter</button>
                     <a href="/expenses" class="btn btn-secondary btn-sm" style="height: 38px;">Reset</a>
                 </div>
             </form>
         </div>
 
-        <!-- ================= EXPENSES TABLE CARD ================= -->
-        <div class="table-card">
-            <div class="table-header-bar">
-                <div style="font-weight: 600; color: var(--text-secondary); font-size: 0.92rem;">
-                    Showing <strong>{{ expenses|length }}</strong> transactions totaling <strong style="color: var(--text-primary);">₹{{ "%.2f"|format(filtered_total|float) }}</strong>
+        <!-- Filtered Total Card -->
+        <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); padding: 1rem 1.5rem; border-radius: var(--radius-md); margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow-sm);">
+            <div>
+                <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">Total for this view:</span>
+                <div style="font-size: 1.6rem; font-weight: 800; font-family: 'JetBrains Mono'; color: var(--text-primary);">
+                    ₹{{ "%.2f"|format(filtered_total) }}
                 </div>
             </div>
-
-            <div class="table-responsive">
-                {% if expenses %}
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Category</th>
-                            <th>Description</th>
-                            <th>Payment Method</th>
-                            <th>Amount</th>
-                            <th style="text-align: right;">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for expense in expenses %}
-                        <tr>
-                            <td>{{ expense.expense_date }}</td>
-                            <td><span class="badge-category cat-{{ expense.category }}">{{ expense.category }}</span></td>
-                            <td>{{ expense.description or "-" }}</td>
-                            <td><span class="badge-payment">{{ expense.payment_method or "UPI" }}</span></td>
-                            <td class="amount-cell">₹{{ "%.2f"|format(expense.amount|float) }}</td>
-                            <td style="text-align: right; white-space: nowrap;">
-                                <a href="/edit-expense/{{ expense.id }}" class="btn btn-secondary btn-sm" style="padding: 0.25rem 0.5rem; margin-right: 0.3rem;">✏️ Edit</a>
-                                <form action="/delete-expense/{{ expense.id }}" method="POST" style="display:inline;" onsubmit="return confirm('Delete this expense record?');">
-                                    <button type="submit" class="btn btn-danger btn-sm" style="padding: 0.25rem 0.5rem;">🗑️ Delete</button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-                {% else %}
-                <div style="padding: 4rem 2rem; text-align: center; color: var(--text-muted);">
-                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔍</div>
-                    <h3 style="color: var(--text-primary); margin-bottom: 0.5rem;">No matching expenses found</h3>
-                    <p style="font-size: 0.9rem;">Try adjusting your search criteria or date filters.</p>
-                    <a href="/expenses" class="btn btn-secondary btn-sm" style="margin-top: 1rem;">Clear Filters</a>
-                </div>
-                {% endif %}
+            <div style="font-size: 0.9rem; color: var(--text-muted);">
+                <strong>{{ expenses|length }}</strong> transactions found
             </div>
         </div>
+
+        <!-- Expenses Table with Bulk Delete -->
+        <section class="table-card">
+            {% if expenses %}
+            <form id="bulkDeleteForm" action="/delete-selected-expenses" method="POST">
+                <!-- Bulk Action Bar -->
+                <div id="bulkActionBar" style="display: none; padding: 0.75rem 1.25rem; background: var(--brand-primary-light); border-radius: var(--radius-sm); margin-bottom: 1rem; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: 700; color: var(--brand-primary);" id="selectedCountText">0 selected</span>
+                    <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Delete all selected expenses?');">
+                        🗑️ Delete Selected
+                    </button>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 40px;"><input type="checkbox" id="selectAllCheckbox" title="Select All"></th>
+                                <th>Date</th>
+                                <th>Category</th>
+                                <th>Description / Item</th>
+                                <th>Payment Method</th>
+                                <th>Amount</th>
+                                <th style="text-align: right;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for expense in expenses %}
+                            <tr>
+                                <td>
+                                    <input type="checkbox" name="selected_ids" value="{{ expense.id }}" class="row-checkbox">
+                                </td>
+                                <td>{{ expense.expense_date }}</td>
+                                <td><span class="badge-category cat-{{ expense.category }}">{{ expense.category }}</span></td>
+                                <td style="font-weight: 600;">{{ expense.description or "-" }}</td>
+                                <td><span class="badge-payment">{{ expense.payment_method or "UPI" }}</span></td>
+                                <td class="amount-cell" style="font-size: 1.05rem; color: var(--text-primary);">
+                                    ₹{{ "%.2f"|format(expense.amount) }}
+                                </td>
+                                <td style="text-align: right;">
+                                    <a href="/edit-expense/{{ expense.id }}" class="btn btn-secondary btn-sm" style="padding: 0.2rem 0.55rem;">✏️ Edit</a>
+                                    <button type="button" class="btn btn-danger btn-sm" style="padding: 0.2rem 0.55rem;"
+                                            onclick="deleteSingleExpense({{ expense.id }})">🗑️ Delete</button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </form>
+            {% else %}
+            <!-- Spotless Empty State -->
+            <div style="padding: 4rem 2rem; text-align: center;">
+                <div style="font-size: 3.5rem; margin-bottom: 0.75rem;">🔍</div>
+                <h3 style="font-size: 1.35rem; font-weight: 800; color: var(--text-primary);">No expenses found</h3>
+                <p style="font-size: 0.95rem; color: var(--text-secondary); margin-top: 0.35rem;">
+                    No records match the current month or search filters.
+                </p>
+                <div style="margin-top: 1.25rem;">
+                    <a href="/add-expense" class="btn btn-primary">+ Add New Expense</a>
+                </div>
+            </div>
+            {% endif %}
+        </section>
 
     </main>
 
-    <!-- ================= AI QUICK-ADD MODAL ================= -->
-    <div id="quickAddModal" class="modal-overlay">
+    <!-- DELETE ALL CONFIRMATION MODAL -->
+    <div id="deleteAllModal" class="modal-overlay">
         <div class="modal-card">
             <div class="modal-header">
-                <h3 style="font-weight: 800; display: flex; align-items: center; gap: 0.5rem;">
-                    <span>⚡</span> AI Smart Quick-Add
-                </h3>
+                <h3 style="font-weight: 800; color: var(--danger-text);">⚠️ Clear All Expenses</h3>
                 <button class="close-modal-btn">&times;</button>
             </div>
-            <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1rem;">
-                Enter expense in natural plain text.
+            <p style="font-size: 0.92rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 1.25rem;">
+                Are you sure you want to delete <strong>ALL expenses</strong> across all months?
+                This cannot be undone.
             </p>
-
-            <div class="form-control" style="margin-bottom: 1rem;">
-                <input type="text" id="quickAddInput" class="form-input" placeholder="e.g. Spent ₹450 on food with UPI today" autocomplete="off">
-            </div>
-
-            <div id="quickAddPreview" style="display: none; background: var(--bg-surface-subtle); padding: 0.85rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); margin-bottom: 1.25rem;"></div>
-
-            <div style="display: flex; gap: 0.75rem;">
-                <button type="button" id="quickAddParseBtn" class="btn btn-secondary" style="flex: 1;">Preview</button>
-                <button type="button" id="quickAddSubmitBtn" class="btn btn-ai" style="flex: 2;">⚡ Confirm & Add</button>
-            </div>
+            <form action="/delete-all-expenses" method="POST">
+                <button type="submit" class="btn btn-danger" style="width: 100%; padding: 0.8rem; font-weight: 700;">
+                    🗑️ Yes, Delete Everything & Start Fresh
+                </button>
+            </form>
         </div>
     </div>
 
-    <!-- Main JavaScript -->
+    <!-- Hidden form for single delete -->
+    <form id="singleDeleteForm" method="POST" style="display: none;"></form>
+
+    <script>
+        function deleteSingleExpense(id) {
+            if (confirm("Delete this expense?")) {
+                const form = document.getElementById("singleDeleteForm");
+                form.action = "/delete-expense/" + id;
+                form.submit();
+            }
+        }
+    </script>
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html>

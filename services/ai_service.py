@@ -4,9 +4,11 @@ import json
 import random
 import math
 from datetime import date, timedelta
-from dotenv import load_dotenv
-
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 

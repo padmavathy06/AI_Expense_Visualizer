@@ -1,69 +1,191 @@
 import io
 import csv
-from datetime import date, timedelta
+import calendar
+from datetime import date, timedelta, datetime
 from database import get_db_connection
-from services import account_service, subscription_service, goal_service
+from services import account_service, subscription_service, goal_service, analytics_service
 
 CATEGORIES = ["Food", "Travel", "Shopping", "Bills", "Education", "Health", "Entertainment", "Other"]
 PAYMENT_METHODS = ["UPI", "Cash", "Debit Card", "Credit Card", "Net Banking"]
+MONTH_NAMES = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+]
 
 
-def get_dashboard_data():
-    """Fetches comprehensive KPIs and financial health metrics for the main dashboard."""
+def get_available_years():
+    """Returns a selectable multi-year range."""
+    current_y = date.today().year
+    years_set = set(range(current_y - 5, current_y + 6))
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT DISTINCT YEAR(expense_date) as y FROM expenses")
+        for r in cursor.fetchall():
+            if r.get("y"):
+                years_set.add(int(r["y"]))
+    except Exception:
+        pass
+    cursor.close()
+    conn.close()
+
+    return sorted(list(years_set), reverse=True)
+
+
+def get_available_months(target_year=None):
+    """
+    Returns ALL 12 months from January to December for the given year.
+    """
+    current_year = date.today().year if not target_year else int(target_year)
+
+    months_list = []
+    for month_num in range(1, 13):
+        m_key = f"{current_year}-{month_num:02d}"
+        m_name = MONTH_NAMES[month_num - 1]
+        m_label = f"{m_name} {current_year}"
+
+        months_list.append({
+            "key": m_key,
+            "month_num": month_num,
+            "month_name": m_name,
+            "year": current_year,
+            "label": m_label
+        })
+
+    return months_list
+
+
+def get_common_dashboard_data(target_year=None, target_month=None, target_date=None):
+    """
+    Fetches clean dashboard metrics based on selected date or month:
+    - If target_date is specified (e.g., '2026-08-20'), isolates expenses for that month ('2026-08').
+    - Specific Month Spent & All-Time Spent
+    - Monthly Budget & Remaining
+    - Category breakdown
+    - Full 12-Month Jan to Dec Trajectory
+    - Accounts, Subscriptions, and Goals summaries
+    """
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # 1. Total Expenses
-    cursor.execute("SELECT COALESCE(SUM(amount), 0) AS total FROM expenses")
+    today_iso = date.today().isoformat()
+    selected_date_str = target_date.strip() if target_date else ""
+
+    if selected_date_str:
+        try:
+            parsed_d = datetime.strptime(selected_date_str, "%Y-%m-%d")
+            selected_month_key = parsed_d.strftime("%Y-%m")
+            current_year = parsed_d.year
+        except Exception:
+            selected_month_key = date.today().strftime("%Y-%m")
+            current_year = date.today().year
+            selected_date_str = today_iso
+    elif target_month and target_month != "all":
+        selected_month_key = target_month
+        try:
+            current_year = int(target_month[:4])
+        except Exception:
+            current_year = date.today().year
+        selected_date_str = f"{selected_month_key}-01"
+    else:
+        selected_month_key = "all" if target_month == "all" else date.today().strftime("%Y-%m")
+        current_year = int(target_year) if target_year else date.today().year
+        if not selected_date_str and selected_month_key != "all":
+            selected_date_str = today_iso
+
+    # 1. Total All-Time Spend
+    cursor.execute("SELECT COALESCE(SUM(amount), 0) AS total, COUNT(*) AS count FROM expenses")
     total_row = cursor.fetchone()
     total_expenses = float(total_row["total"]) if total_row else 0.0
+    transaction_count = int(total_row["count"]) if total_row else 0
 
-    # 2. This Month Expenses
-    cursor.execute("""
-        SELECT COALESCE(SUM(amount), 0) AS monthly_total
-        FROM expenses
-        WHERE MONTH(expense_date) = MONTH(CURDATE())
-        AND YEAR(expense_date) = YEAR(CURDATE())
-    """)
-    monthly_row = cursor.fetchone()
-    monthly_expenses = float(monthly_row["monthly_total"]) if monthly_row else 0.0
+    # 2. Selected Month / Period Spend
+    if selected_month_key == "all":
+        cursor.execute("""
+            SELECT COALESCE(SUM(amount), 0) AS monthly_total, COUNT(*) AS count
+            FROM expenses
+            WHERE YEAR(expense_date) = %s
+        """, (current_year,))
+    else:
+        cursor.execute("""
+            SELECT COALESCE(SUM(amount), 0) AS monthly_total, COUNT(*) AS count
+            FROM expenses
+            WHERE DATE_FORMAT(expense_date, '%Y-%m') = %s
+        """, (selected_month_key,))
 
-    # 3. Transaction Count
-    cursor.execute("SELECT COUNT(*) AS transaction_count FROM expenses")
-    count_row = cursor.fetchone()
-    transaction_count = int(count_row["transaction_count"]) if count_row else 0
+    month_row = cursor.fetchone()
+    monthly_expenses = float(month_row["monthly_total"]) if month_row else 0.0
+    monthly_count = int(month_row["count"]) if month_row else 0
 
-    # 4. Recent Expenses
-    cursor.execute("""
-        SELECT *
-        FROM expenses
-        ORDER BY expense_date DESC, id DESC
-        LIMIT 6
-    """)
+    # 3. Transactions for selected period
+    if selected_month_key == "all":
+        cursor.execute("""
+            SELECT *
+            FROM expenses
+            WHERE YEAR(expense_date) = %s
+            ORDER BY expense_date DESC, id DESC
+            LIMIT 15
+        """, (current_year,))
+    else:
+        cursor.execute("""
+            SELECT *
+            FROM expenses
+            WHERE DATE_FORMAT(expense_date, '%Y-%m') = %s
+            ORDER BY expense_date DESC, id DESC
+        """, (selected_month_key,))
+
     recent_expenses = cursor.fetchall()
+    for e in recent_expenses:
+        e["amount"] = float(e.get("amount") or 0.0)
 
-    # 5. Category-wise Expenses
-    cursor.execute("""
-        SELECT category, SUM(amount) AS total, COUNT(*) as count
-        FROM expenses
-        GROUP BY category
-        ORDER BY total DESC
-    """)
+    # 4. Category-wise Distribution
+    if selected_month_key == "all":
+        cursor.execute("""
+            SELECT category, SUM(amount) AS total, COUNT(*) as count
+            FROM expenses
+            WHERE YEAR(expense_date) = %s
+            GROUP BY category
+            ORDER BY total DESC
+        """, (current_year,))
+    else:
+        cursor.execute("""
+            SELECT category, SUM(amount) AS total, COUNT(*) as count
+            FROM expenses
+            WHERE DATE_FORMAT(expense_date, '%Y-%m') = %s
+            GROUP BY category
+            ORDER BY total DESC
+        """, (selected_month_key,))
+
     category_data = cursor.fetchall()
+    for c in category_data:
+        c["total"] = float(c.get("total") or 0.0)
 
-    # 6. Monthly Trend
+    # 5. FULL 12-MONTH (January to December) Trajectory Chart Data
     cursor.execute("""
         SELECT
-            DATE_FORMAT(expense_date, '%Y-%m') AS month,
+            MONTH(expense_date) AS month_num,
             SUM(amount) AS total,
             COUNT(*) as count
         FROM expenses
-        GROUP BY DATE_FORMAT(expense_date, '%Y-%m')
-        ORDER BY month ASC
-    """)
-    monthly_data = cursor.fetchall()
+        WHERE YEAR(expense_date) = %s
+        GROUP BY MONTH(expense_date)
+        ORDER BY month_num ASC
+    """, (current_year,))
+    month_db_rows = cursor.fetchall()
+    month_spend_map = {int(r["month_num"]): float(r["total"]) for r in month_db_rows}
 
-    # 7. Payment Method Breakdown
+    monthly_12_data = []
+    for m_num in range(1, 13):
+        m_name = MONTH_NAMES[m_num - 1]
+        monthly_12_data.append({
+            "month_num": m_num,
+            "month": m_name,
+            "month_key": f"{current_year}-{m_num:02d}",
+            "total": month_spend_map.get(m_num, 0.0)
+        })
+
+    # 6. Payment Method Breakdown
     cursor.execute("""
         SELECT COALESCE(payment_method, 'Other') AS payment_method, SUM(amount) AS total
         FROM expenses
@@ -71,19 +193,16 @@ def get_dashboard_data():
         ORDER BY total DESC
     """)
     payment_data = cursor.fetchall()
+    for p in payment_data:
+        p["total"] = float(p.get("total") or 0.0)
 
-    # 8. Monthly Budget
-    cursor.execute("""
-        SELECT monthly_budget
-        FROM budget
-        ORDER BY id DESC
-        LIMIT 1
-    """)
+    # 7. Monthly Budget
+    cursor.execute("SELECT monthly_budget FROM budget ORDER BY id DESC LIMIT 1")
     budget_row = cursor.fetchone()
     budget = float(budget_row["monthly_budget"]) if budget_row else 25000.00
     budget_remaining = budget - monthly_expenses
 
-    # 9. Category Budgets
+    # 8. Category Budgets
     cursor.execute("SELECT category, allocated_amount FROM category_budgets")
     cat_budgets = {row["category"]: float(row["allocated_amount"]) for row in cursor.fetchall()}
 
@@ -105,45 +224,79 @@ def get_dashboard_data():
     cursor.close()
     conn.close()
 
-    # 10. Net Worth & Subscriptions & Goals summaries
-    net_worth_data = account_service.get_net_worth_summary()
+    # 9. Accounts, Subscriptions, Goals summaries
+    net_worth_summary = account_service.get_net_worth_summary()
     sub_summary = subscription_service.get_subscription_summary()
     goals = goal_service.get_goals()
+    compliance = analytics_service.get_50_30_20_compliance(category_data)
+
+    all_12_months = get_available_months(current_year)
+    available_years = get_available_years()
+
+    if selected_month_key == "all":
+        selected_month_label = f"Full Year {current_year}"
+    else:
+        try:
+            dt = datetime.strptime(selected_month_key, "%Y-%m")
+            selected_month_label = dt.strftime("%B %Y")
+        except Exception:
+            selected_month_label = selected_month_key
 
     return {
         "total_expenses": total_expenses,
         "monthly_expenses": monthly_expenses,
+        "monthly_count": monthly_count,
         "transaction_count": transaction_count,
         "budget": budget,
         "budget_remaining": budget_remaining,
         "recent_expenses": recent_expenses,
         "category_data": category_data,
-        "monthly_data": monthly_data,
+        "monthly_data": monthly_12_data,
         "payment_data": payment_data,
         "category_budget_comparison": category_budget_comparison,
-        "net_worth": net_worth_data["net_worth"],
-        "liquid_assets": net_worth_data["liquid_assets"],
-        "total_assets": net_worth_data["total_assets"],
-        "liabilities": net_worth_data["liabilities"],
-        "accounts": net_worth_data["accounts"],
+        "net_worth": net_worth_summary["net_worth"],
+        "total_assets": net_worth_summary["total_assets"],
+        "liquid_assets": net_worth_summary["liquid_assets"],
+        "liabilities": net_worth_summary["liabilities"],
+        "accounts": net_worth_summary["accounts"],
         "sub_summary": sub_summary,
-        "goals": goals[:3]  # top 3 goals
+        "goals": goals[:4],
+        "compliance": compliance,
+        "all_12_months": all_12_months,
+        "available_years": available_years,
+        "current_year": current_year,
+        "selected_month": selected_month_key,
+        "selected_month_label": selected_month_label,
+        "selected_date": selected_date_str
     }
 
 
+def get_dashboard_data():
+    return get_common_dashboard_data()
+
+
 def get_filtered_expenses(search=None, category=None, payment_method=None,
-                          start_date=None, end_date=None, sort_by="expense_date",
-                          sort_order="DESC"):
+                          start_date=None, end_date=None, target_month=None,
+                          target_year=None, sort_by="expense_date", sort_order="DESC"):
+    """Query expenses across all dates, months, years with full-text search and filters."""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
     conditions = []
     params = []
 
+    if target_month and target_month != "all":
+        conditions.append("DATE_FORMAT(expense_date, '%Y-%m') = %s")
+        params.append(target_month)
+
+    if target_year and target_year != "all":
+        conditions.append("YEAR(expense_date) = %s")
+        params.append(target_year)
+
     if search:
         conditions.append("(description LIKE %s OR category LIKE %s OR payment_method LIKE %s)")
-        search_param = f"%{search}%"
-        params.extend([search_param, search_param, search_param])
+        p = f"%{search}%"
+        params.extend([p, p, p])
 
     if category and category != "all":
         conditions.append("category = %s")
@@ -162,8 +315,8 @@ def get_filtered_expenses(search=None, category=None, payment_method=None,
         params.append(end_date)
 
     where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-    allowed_sort_cols = {"expense_date": "expense_date", "amount": "amount", "category": "category", "id": "id"}
-    col = allowed_sort_cols.get(sort_by, "expense_date")
+    allowed_cols = {"expense_date": "expense_date", "amount": "amount", "category": "category", "id": "id"}
+    col = allowed_cols.get(sort_by, "expense_date")
     order = "ASC" if sort_order.upper() == "ASC" else "DESC"
 
     query = f"""
@@ -174,6 +327,9 @@ def get_filtered_expenses(search=None, category=None, payment_method=None,
     """
     cursor.execute(query, tuple(params) if params else None)
     results = cursor.fetchall()
+    for r in results:
+        r["amount"] = float(r.get("amount") or 0.0)
+
     cursor.close()
     conn.close()
     return results
@@ -189,7 +345,6 @@ def add_expense(amount, category, description, expense_date, payment_method):
     """
     cursor.execute(query, (amount, category, description, expense_date, payment_method))
 
-    # Also log to unified transactions table
     cursor.execute("""
         INSERT INTO transactions (type, amount, category, description, transaction_date, payment_method)
         VALUES ('expense', %s, %s, %s, %s, %s)
@@ -207,6 +362,8 @@ def get_expense_by_id(expense_id):
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM expenses WHERE id = %s", (expense_id,))
     row = cursor.fetchone()
+    if row:
+        row["amount"] = float(row.get("amount") or 0.0)
     cursor.close()
     conn.close()
     return row
@@ -229,6 +386,32 @@ def delete_expense(expense_id):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM expenses WHERE id = %s", (expense_id,))
+    cursor.execute("DELETE FROM transactions WHERE id = %s", (expense_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def delete_all_expenses():
+    """Wipes ALL recorded expenses and transactions cleanly in 1 click."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM expenses")
+    cursor.execute("DELETE FROM transactions")
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def delete_multiple_expenses(id_list):
+    """Deletes a selected list of expense IDs."""
+    if not id_list:
+        return
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    placeholders = ", ".join(["%s"] * len(id_list))
+    cursor.execute(f"DELETE FROM expenses WHERE id IN ({placeholders})", tuple(id_list))
+    cursor.execute(f"DELETE FROM transactions WHERE id IN ({placeholders})", tuple(id_list))
     conn.commit()
     cursor.close()
     conn.close()
@@ -263,6 +446,40 @@ def set_category_budget(category, allocated_amount):
     conn.close()
 
 
+def seed_sample_data():
+    """Seeds the entire multi-dimensional ecosystem with realistic demo records."""
+    account_service.seed_default_accounts()
+    subscription_service.seed_default_subscriptions()
+    goal_service.seed_default_goals()
+
+    sample_txs = [
+        (85000.00, "Salary", "Monthly Tech Corp Salary", "2026-08-01", "Bank Transfer", "income"),
+        (12000.00, "Freelance", "Client Web App Retainer", "2026-08-10", "UPI", "income"),
+        (450.00, "Food", "Subway lunch combo", "2026-08-18", "UPI", "expense"),
+        (1200.00, "Bills", "Airtel Fiber Broadband", "2026-08-15", "Credit Card", "expense"),
+        (850.00, "Travel", "Uber Ride Downtown", "2026-08-19", "UPI", "expense"),
+        (2400.00, "Shopping", "Amazon Ergonomic Keyboard", "2026-08-12", "Debit Card", "expense"),
+        (650.00, "Entertainment", "PVR IMAX Movie Tickets", "2026-08-14", "Credit Card", "expense"),
+        (4800.00, "Food", "Groceries at Nature Basket", "2026-07-28", "Credit Card", "expense"),
+        (15000.00, "Bills", "Apartment Rent & Maintenance", "2026-07-05", "Net Banking", "expense"),
+        (3500.00, "Health", "Cult.fit Annual Gym pass", "2026-06-20", "Credit Card", "expense"),
+        (85000.00, "Salary", "Monthly Tech Corp Salary", "2026-07-01", "Bank Transfer", "income"),
+        (1500.00, "Food", "Dinner with Family at Barbeque Nation", "2026-07-19", "UPI", "expense"),
+        (320.00, "Travel", "Metro Smartcard Recharge", "2026-07-22", "UPI", "expense"),
+        (18500.00, "Education", "Fullstack AI Certification Course", "2026-06-15", "Credit Card", "expense"),
+        (2200.00, "Shopping", "Zara Linen Shirt", "2026-06-08", "Debit Card", "expense"),
+        (85000.00, "Salary", "Monthly Tech Corp Salary", "2026-06-01", "Bank Transfer", "income"),
+        (1400.00, "Bills", "Electricity Bill BESCOM", "2026-06-18", "Net Banking", "expense"),
+        (550.00, "Food", "Starbucks Cold Brew & Croissant", "2026-08-20", "UPI", "expense")
+    ]
+
+    from services import transaction_service
+    for amt, cat, desc, d, pm, t_type in sample_txs:
+        transaction_service.add_transaction(amt, cat, desc, d, pm, txn_type=t_type)
+
+    return len(sample_txs)
+
+
 def export_expenses_to_csv(expenses):
     output = io.StringIO()
     writer = csv.writer(output)
@@ -278,105 +495,3 @@ def export_expenses_to_csv(expenses):
             exp.get("created_at", "")
         ])
     return output.getvalue()
-
-
-def seed_sample_data():
-    """Seeds the entire ultra-deep financial ecosystem."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    # Clear old data
-    cursor.execute("DELETE FROM expenses")
-    cursor.execute("DELETE FROM transactions")
-    cursor.execute("DELETE FROM budget")
-    cursor.execute("DELETE FROM category_budgets")
-    cursor.execute("DELETE FROM accounts")
-    cursor.execute("DELETE FROM subscriptions")
-    cursor.execute("DELETE FROM financial_goals")
-
-    # Set Monthly Budget
-    cursor.execute("INSERT INTO budget (monthly_budget) VALUES (%s)", (28000.00,))
-    conn.commit()
-    cursor.close()
-    conn.close()
-
-    # Seed Accounts, Subscriptions, Goals with their own clean transactions
-    account_service.seed_default_accounts()
-    subscription_service.seed_default_subscriptions()
-    goal_service.seed_default_goals()
-
-    # Re-open for category budgets & demo transactions
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    # Category Budgets
-    sample_cat_budgets = [
-        ("Food", 8000.00),
-        ("Travel", 4500.00),
-        ("Shopping", 6000.00),
-        ("Bills", 5000.00),
-        ("Entertainment", 3000.00),
-        ("Health", 2500.00)
-    ]
-    for cat, amt in sample_cat_budgets:
-        if conn.is_sqlite:
-            cursor.execute("INSERT INTO category_budgets (category, allocated_amount) VALUES (%s, %s)", (cat, amt))
-        else:
-            cursor.execute("INSERT INTO category_budgets (category, allocated_amount) VALUES (%s, %s)", (cat, amt))
-
-    # Realistic Transactions
-    today = date.today()
-    demo_expenses = [
-        (450.00, "Food", "Lunch at Cafe Mocha with team", (today - timedelta(days=1)).isoformat(), "UPI"),
-        (1250.00, "Shopping", "Amazon - Ergonomic mouse & keyboard pad", (today - timedelta(days=2)).isoformat(), "Credit Card"),
-        (350.00, "Travel", "Uber cab to downtown meeting", (today - timedelta(days=3)).isoformat(), "UPI"),
-        (2199.00, "Bills", "Airtel Fiber Broadband & mobile recharge", (today - timedelta(days=5)).isoformat(), "Net Banking"),
-        (820.00, "Food", "Dinner with friends at Domino's", (today - timedelta(days=6)).isoformat(), "UPI"),
-        (1500.00, "Health", "Monthly Gym Membership renewal", (today - timedelta(days=8)).isoformat(), "UPI"),
-        (649.00, "Entertainment", "PVR Cinemas movie tickets", (today - timedelta(days=10)).isoformat(), "Credit Card"),
-        (2800.00, "Shopping", "Myntra weekend fashion sale", (today - timedelta(days=12)).isoformat(), "Debit Card"),
-        (550.00, "Food", "Supermarket grocery staples", (today - timedelta(days=14)).isoformat(), "UPI"),
-        (400.00, "Travel", "Petrol refill for two-wheeler", (today - timedelta(days=16)).isoformat(), "Cash"),
-        (1200.00, "Education", "Udemy Python & AI Masterclass course", (today - timedelta(days=18)).isoformat(), "Credit Card"),
-        (3500.00, "Bills", "Electricity bill payment (BESCOM)", (today - timedelta(days=20)).isoformat(), "Net Banking"),
-        (300.00, "Food", "Morning breakfast & filter coffee", (today - timedelta(days=22)).isoformat(), "Cash"),
-        (180.00, "Travel", "Metro train smart card topup", (today - timedelta(days=25)).isoformat(), "UPI"),
-        # Past months
-        (950.00, "Food", "Barbeque Nation family buffet", (today - timedelta(days=34)).isoformat(), "Credit Card"),
-        (4200.00, "Shopping", "Noise Smartwatch & earphones", (today - timedelta(days=38)).isoformat(), "Credit Card"),
-        (2100.00, "Bills", "Water & maintenance quarterly dues", (today - timedelta(days=42)).isoformat(), "Net Banking"),
-        (850.00, "Travel", "Outstation cab toll & fuel", (today - timedelta(days=45)).isoformat(), "Cash"),
-        (1400.00, "Health", "Pharmacy prescription medicines", (today - timedelta(days=50)).isoformat(), "UPI"),
-        (3200.00, "Bills", "Summer AC Electricity bill", (today - timedelta(days=65)).isoformat(), "Net Banking"),
-        (1100.00, "Food", "Weekend restaurant dinner", (today - timedelta(days=70)).isoformat(), "UPI"),
-        (2500.00, "Shopping", "Books & desk organizer", (today - timedelta(days=75)).isoformat(), "Credit Card"),
-    ]
-
-    for amt, cat, desc, exp_date, pm in demo_expenses:
-        cursor.execute("""
-            INSERT INTO expenses (amount, category, description, expense_date, payment_method)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (amt, cat, desc, exp_date, pm))
-        cursor.execute("""
-            INSERT INTO transactions (type, amount, category, description, transaction_date, payment_method)
-            VALUES ('expense', %s, %s, %s, %s, %s)
-        """, (amt, cat, desc, exp_date, pm))
-
-    # Add Salary and Freelance Income
-    cursor.execute("""
-        INSERT INTO transactions (type, amount, category, description, transaction_date, payment_method)
-        VALUES ('income', 75000.00, 'Salary', 'Monthly Tech Corp Salary', %s, 'Net Banking')
-    """, ((today - timedelta(days=20)).isoformat(),))
-    cursor.execute("""
-        INSERT INTO transactions (type, amount, category, description, transaction_date, payment_method)
-        VALUES ('income', 75000.00, 'Salary', 'Monthly Tech Corp Salary', %s, 'Net Banking')
-    """, ((today - timedelta(days=50)).isoformat(),))
-    cursor.execute("""
-        INSERT INTO transactions (type, amount, category, description, transaction_date, payment_method)
-        VALUES ('income', 18000.00, 'Freelance', 'Fullstack Web App Contract', %s, 'UPI')
-    """, ((today - timedelta(days=15)).isoformat(),))
-
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return len(demo_expenses)

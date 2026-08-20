@@ -1,9 +1,10 @@
 import os
 import sqlite3
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 DB_TYPE = os.getenv("DB_TYPE", "mysql").lower()
 DB_HOST = os.getenv("DB_HOST", "localhost")

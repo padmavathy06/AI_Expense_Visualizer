@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -26,7 +26,7 @@
         </nav>
 
         <div class="nav-actions">
-            <button id="themeToggleBtn" class="theme-toggle-btn" title="Toggle Dark/Light Mode">🌙</button>
+            <button id="themeToggleBtn" class="theme-toggle-btn" title="Toggle Dark/Light Mode">☀️</button>
             <button class="btn btn-ai btn-sm" data-modal-target="quickAddModal">⚡ AI Quick Add</button>
             <a href="/add-expense" class="btn btn-primary btn-sm">+ Log Spend</a>
         </div>
@@ -50,34 +50,35 @@
         <!-- Page Header -->
         <div class="page-header">
             <div>
-                <h1 class="page-title">Unified Financial Ledger</h1>
-                <p class="page-subtitle">Track income deposits, expense outflows, and account transfers in one real-time ledger.</p>
+                <h1 class="page-title">💳 Unified Financial Ledger</h1>
+                <p class="page-subtitle">Track income deposits, expense outflows, and account transfers across all dates, months, and years.</p>
             </div>
 
             <div class="header-action-group">
                 <a href="/api/export/csv" class="btn btn-secondary btn-sm">📥 Export CSV</a>
                 <a href="/import" class="btn btn-secondary btn-sm">📁 Import Statement</a>
+                <button class="btn btn-danger btn-sm" data-modal-target="deleteAllModal">🗑️ Delete All</button>
                 <a href="/add-expense" class="btn btn-primary btn-sm">+ Add Transaction</a>
             </div>
         </div>
 
         <!-- Ledger Summary Metrics -->
         <div class="metrics-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 1.5rem;">
-            <div class="metric-card" style="padding: 1rem 1.25rem;">
+            <div class="metric-card" style="padding: 1.15rem 1.4rem;">
                 <div class="metric-label" style="color: var(--success-text);">Total Inflow (Income)</div>
-                <div class="metric-value" style="color: var(--success-text); font-size: 1.5rem;">
+                <div class="metric-value" style="color: var(--success-text); font-size: 1.6rem;">
                     +₹{{ "%.2f"|format(total_income) }}
                 </div>
             </div>
-            <div class="metric-card" style="padding: 1rem 1.25rem;">
+            <div class="metric-card" style="padding: 1.15rem 1.4rem;">
                 <div class="metric-label" style="color: var(--danger-text);">Total Outflow (Expenses)</div>
-                <div class="metric-value" style="color: var(--danger-text); font-size: 1.5rem;">
+                <div class="metric-value" style="color: var(--danger-text); font-size: 1.6rem;">
                     -₹{{ "%.2f"|format(total_expense) }}
                 </div>
             </div>
-            <div class="metric-card" style="padding: 1rem 1.25rem;">
+            <div class="metric-card" style="padding: 1.15rem 1.4rem;">
                 <div class="metric-label">Net Cash Flow</div>
-                <div class="metric-value" style="font-size: 1.5rem; color: {{ 'var(--success-text)' if net_flow >= 0 else 'var(--danger-text)' }};">
+                <div class="metric-value" style="font-size: 1.6rem; color: {{ 'var(--success-text)' if net_flow >= 0 else 'var(--danger-text)' }};">
                     {{ '+' if net_flow >= 0 else '' }}₹{{ "%.2f"|format(net_flow) }}
                 </div>
             </div>
@@ -129,89 +130,125 @@
                 </div>
 
                 <div class="form-control">
+                    <label for="monthCalendar">Month (Calendar)</label>
+                    <input type="month" id="monthCalendar" name="month"
+                           value="{% if selected_month != 'all' %}{{ selected_month }}{% endif %}"
+                           class="form-input" style="height: 38px; cursor: pointer;"
+                           onchange="this.form.submit()">
+                </div>
+
+                <div class="form-control">
                     <label for="start_date">From Date</label>
                     <input type="date" name="start_date" id="start_date" class="form-input" value="{{ start_date }}">
                 </div>
 
-                <div class="form-control">
-                    <label for="end_date">To Date</label>
-                    <input type="date" name="end_date" id="end_date" class="form-input" value="{{ end_date }}">
-                </div>
-
-                <div style="display: flex; gap: 0.5rem;">
+                <div style="display: flex; gap: 0.4rem;">
                     <button type="submit" class="btn btn-primary btn-sm" style="height: 38px;">Filter</button>
                     <a href="/transactions" class="btn btn-secondary btn-sm" style="height: 38px;">Reset</a>
                 </div>
             </form>
         </div>
 
-        <!-- Ledger Table Card -->
+        <!-- Ledger Table Card with Bulk Actions -->
         <div class="table-card">
             <div class="table-header-bar">
                 <div style="font-weight: 600; color: var(--text-secondary);">
-                    Showing <strong>{{ transactions|length }}</strong> ledger entries
+                    Showing <strong>{{ transactions|length }}</strong> transactions
                 </div>
             </div>
 
-            <div class="table-responsive">
-                {% if transactions %}
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Type</th>
-                            <th>Category</th>
-                            <th>Description</th>
-                            <th>Account / Method</th>
-                            <th>Amount</th>
-                            <th style="text-align: right;">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for tx in transactions %}
-                        <tr>
-                            <td>{{ tx.transaction_date }}</td>
-                            <td>
-                                {% if tx.type == 'income' %}
-                                <span class="badge-category cat-Salary">💰 Income</span>
-                                {% elif tx.type == 'transfer' %}
-                                <span class="badge-payment">🔄 Transfer</span>
-                                {% else %}
-                                <span class="badge-category cat-Health">💸 Expense</span>
-                                {% endif %}
-                            </td>
-                            <td><span class="badge-category cat-{{ tx.category }}">{{ tx.category }}</span></td>
-                            <td>{{ tx.description or "-" }}</td>
-                            <td>
-                                {% if tx.account_name %}
-                                <span class="badge-payment">{{ tx.account_icon }} {{ tx.account_name }}</span>
-                                {% else %}
-                                <span class="badge-payment">{{ tx.payment_method or "UPI" }}</span>
-                                {% endif %}
-                            </td>
-                            <td class="amount-cell" style="color: {{ 'var(--success-text)' if tx.type == 'income' else ('inherit' if tx.type == 'transfer' else 'var(--text-primary)') }};">
-                                {{ '+' if tx.type == 'income' else ('-' if tx.type == 'expense' else '') }}₹{{ "%.2f"|format(tx.amount|float) }}
-                            </td>
-                            <td style="text-align: right;">
-                                <form action="/delete-expense/{{ tx.id }}" method="POST" style="display:inline;" onsubmit="return confirm('Delete this ledger record?');">
-                                    <button type="submit" class="btn btn-danger btn-sm" style="padding: 0.2rem 0.5rem;">🗑️ Delete</button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-                {% else %}
-                <div style="padding: 4rem 2rem; text-align: center; color: var(--text-muted);">
-                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔍</div>
-                    <h3 style="color: var(--text-primary);">No transactions found</h3>
-                    <p style="font-size: 0.9rem;">Adjust filters or add a new transaction.</p>
+            {% if transactions %}
+            <form id="bulkDeleteForm" action="/delete-selected-expenses" method="POST">
+                <!-- Bulk Action Bar -->
+                <div id="bulkActionBar" style="display: none; padding: 0.75rem 1rem; background: var(--brand-primary-light); border-radius: var(--radius-sm); margin: 1rem 0; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: 700; color: var(--brand-primary);" id="selectedCountText">0 selected</span>
+                    <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Delete all selected transactions?');">
+                        🗑️ Delete Selected
+                    </button>
                 </div>
-                {% endif %}
+
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 40px;"><input type="checkbox" id="selectAllCheckbox" title="Select All"></th>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Category</th>
+                                <th>Description</th>
+                                <th>Account / Method</th>
+                                <th>Amount</th>
+                                <th style="text-align: right;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for tx in transactions %}
+                            <tr>
+                                <td>
+                                    <input type="checkbox" name="selected_ids" value="{{ tx.id }}" class="row-checkbox">
+                                </td>
+                                <td>{{ tx.transaction_date }}</td>
+                                <td>
+                                    {% if tx.type == 'income' %}
+                                    <span class="badge-category cat-Salary">💰 Income</span>
+                                    {% elif tx.type == 'transfer' %}
+                                    <span class="badge-payment">🔄 Transfer</span>
+                                    {% else %}
+                                    <span class="badge-category cat-Health">💸 Expense</span>
+                                    {% endif %}
+                                </td>
+                                <td><span class="badge-category cat-{{ tx.category }}">{{ tx.category }}</span></td>
+                                <td style="font-weight: 600;">{{ tx.description or "-" }}</td>
+                                <td>
+                                    {% if tx.account_name %}
+                                    <span class="badge-payment">{{ tx.account_icon }} {{ tx.account_name }}</span>
+                                    {% else %}
+                                    <span class="badge-payment">{{ tx.payment_method or "UPI" }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="amount-cell" style="font-size: 1.05rem; color: {{ 'var(--success-text)' if tx.type == 'income' else ('inherit' if tx.type == 'transfer' else 'var(--text-primary)') }};">
+                                    {{ '+' if tx.type == 'income' else ('-' if tx.type == 'expense' else '') }}₹{{ "%.2f"|format(tx.amount|float) }}
+                                </td>
+                                <td style="text-align: right;">
+                                    <form action="/delete-expense/{{ tx.id }}" method="POST" style="display:inline;" onsubmit="return confirm('Delete this record?');">
+                                        <button type="submit" class="btn btn-danger btn-sm" style="padding: 0.2rem 0.5rem;">🗑️</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </form>
+            {% else %}
+            <div style="padding: 4rem 2rem; text-align: center; color: var(--text-muted);">
+                <div style="font-size: 3rem; margin-bottom: 0.5rem;">🔍</div>
+                <h3 style="color: var(--text-primary);">No transactions found</h3>
+                <p style="font-size: 0.9rem; margin-top: 0.25rem;">Adjust filters or add a new transaction above.</p>
             </div>
+            {% endif %}
         </div>
 
     </main>
+
+    <!-- Delete All Modal -->
+    <div id="deleteAllModal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 style="font-weight: 800; color: var(--danger-text);">⚠️ Clear All Expenses</h3>
+                <button class="close-modal-btn">&times;</button>
+            </div>
+            <p style="font-size: 0.92rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 1.25rem;">
+                Are you sure you want to delete <strong>ALL transactions</strong>?
+                This will reset your entire ledger to ₹0.00.
+            </p>
+            <form action="/delete-all-expenses" method="POST">
+                <button type="submit" class="btn btn-danger" style="width: 100%; padding: 0.8rem; font-weight: 700;">
+                    🗑️ Yes, Delete Everything
+                </button>
+            </form>
+        </div>
+    </div>
 
     <!-- AI Quick Add Modal -->
     <div id="quickAddModal" class="modal-overlay">
@@ -220,8 +257,11 @@
                 <h3 style="font-weight: 800;">⚡ AI Smart Quick-Add</h3>
                 <button class="close-modal-btn">&times;</button>
             </div>
+            <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1rem;">
+                Type naturally (e.g. <em>"450 lunch via upi"</em>, <em>"coffee 120"</em>, <em>"swiggy 380"</em>). Press Enter to add!
+            </p>
             <div class="form-control" style="margin-bottom: 1rem;">
-                <input type="text" id="quickAddInput" class="form-input" placeholder="e.g. 450 lunch at subway via UPI">
+                <input type="text" id="quickAddInput" class="form-input" placeholder="e.g. 450 lunch via upi">
             </div>
             <div id="quickAddPreview" style="display: none; background: var(--bg-surface-subtle); padding: 0.85rem; border-radius: var(--radius-sm); margin-bottom: 1rem;"></div>
             <button type="button" id="quickAddSubmitBtn" class="btn btn-ai" style="width: 100%;">⚡ Confirm & Add</button>

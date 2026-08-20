@@ -1,10 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Executive Wealth Dashboard - AI Expense Visualizer</title>
-
+    <title>AI Expense Visualizer</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -28,7 +27,7 @@
         </nav>
 
         <div class="nav-actions">
-            <button id="themeToggleBtn" class="theme-toggle-btn" title="Toggle Dark/Light Mode">🌙</button>
+            <button id="themeToggleBtn" class="theme-toggle-btn" title="Toggle Dark/Light Mode">☀️</button>
             <button class="btn btn-ai btn-sm" data-modal-target="quickAddModal">⚡ AI Quick Add</button>
             <a href="/add-expense" class="btn btn-primary btn-sm">+ Log Spend</a>
         </div>
@@ -49,121 +48,102 @@
             {% endif %}
         {% endwith %}
 
-        <!-- Page Header -->
-        <div class="page-header">
+        <!-- Space-Saving Header with Calendar Date & Month Selector -->
+        <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.25rem;">
             <div>
-                <h1 class="page-title">Executive Wealth Dashboard</h1>
-                <p class="page-subtitle">Real-time net worth tracking, multi-account banking, AI budget optimization, and portfolio metrics.</p>
+                <h1 class="page-title" style="margin-bottom: 0.2rem;">Expense Dashboard</h1>
+                <p class="page-subtitle" style="font-size: 0.88rem;">Overview for <strong style="color: var(--brand-primary);">{{ selected_month_label }}</strong></p>
             </div>
 
-            <div class="header-action-group">
-                <button class="btn btn-secondary btn-sm" data-modal-target="transferModal">💸 Transfer Money</button>
-                <button class="btn btn-secondary btn-sm" data-modal-target="receiptModal">📸 Scan Receipt</button>
-                <a href="/import" class="btn btn-secondary btn-sm">📥 Bank CSV Import</a>
-                <form action="/api/seed-demo-data" method="POST" style="display:inline;" onsubmit="return confirm('Seed demo dataset? Loads 25+ transactions, 5 accounts, 6 subscriptions, and 4 goals.');">
-                    <button type="submit" class="btn btn-secondary btn-sm">🌱 Demo Data</button>
-                </form>
-            </div>
+            <!-- Calendar Date Picker (Clicking calendar opens month & day picker) -->
+            <form action="/" method="GET" style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: 0.5rem; background: var(--bg-surface); padding: 0.4rem 0.85rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
+                    <label for="calendarDateInput" style="display: flex; align-items: center; gap: 0.4rem; cursor: pointer; font-weight: 700; font-size: 0.9rem; color: var(--text-primary); margin: 0;">
+                        <span style="font-size: 1.2rem;">📅</span> Select Date / Month:
+                    </label>
+                    <input type="date" id="calendarDateInput" name="date"
+                           value="{{ selected_date }}"
+                           class="form-input"
+                           style="width: auto; padding: 0.35rem 0.65rem; font-size: 0.9rem; font-weight: 700; cursor: pointer; border-radius: var(--radius-sm);"
+                           onchange="this.form.submit()"
+                           title="Click calendar icon to pick any date or month">
+                </div>
+
+                {% if selected_month != 'all' %}
+                <a href="/?month=all" class="btn btn-secondary btn-sm" title="View all expenses across full year">
+                    🗓️ Full Year
+                </a>
+                {% endif %}
+            </form>
         </div>
 
-        <!-- ================= TOP WEALTH METRICS GRID ================= -->
+        <!-- ================= IN-PAGE INSTANT QUICK-ADD ================= -->
+        <div class="instant-add-banner" style="margin-bottom: 1.5rem;">
+            <div style="display: flex; align-items: center; gap: 0.75rem; width: 100%;">
+                <span style="font-size: 1.4rem;">⚡</span>
+                <input type="text" id="inPageQuickInput" class="form-input"
+                       placeholder="Type your expense here... (e.g. '450 lunch', 'coffee 120', 'swiggy 380', 'petrol 500') and press Enter!"
+                       autocomplete="off" style="font-size: 0.95rem; padding: 0.75rem 1.1rem;">
+                <button type="button" id="inPageQuickBtn" class="btn btn-ai" style="padding: 0.75rem 1.3rem;">+ Add</button>
+            </div>
+            <div id="inPageQuickPreview" style="display: none; margin-top: 0.75rem; padding: 0.65rem 1rem; background: var(--bg-surface-subtle); border-radius: var(--radius-sm); font-size: 0.88rem;"></div>
+        </div>
+
+        <!-- ================= EXPENSE-FOCUSED METRIC CARDS ================= -->
         <section class="metrics-grid">
             <div class="metric-card">
                 <div class="metric-card-top">
-                    <span class="metric-label">Total Net Worth</span>
-                    <div class="metric-icon-wrap icon-purple">💎</div>
-                </div>
-                <div class="metric-value">₹{{ "%.2f"|format(net_worth|float) }}</div>
-                <div class="metric-subtitle">
-                    <span>Assets: ₹{{ "%.0f"|format(total_assets) }} &bull; Dues: ₹{{ "%.0f"|format(liabilities) }}</span>
-                </div>
-            </div>
-
-            <div class="metric-card">
-                <div class="metric-card-top">
-                    <span class="metric-label">Liquid Assets</span>
-                    <div class="metric-icon-wrap icon-cyan">💧</div>
-                </div>
-                <div class="metric-value">₹{{ "%.2f"|format(liquid_assets|float) }}</div>
-                <div class="metric-subtitle">
-                    <span>Available across {{ accounts|length }} accounts</span>
-                </div>
-            </div>
-
-            <div class="metric-card">
-                <div class="metric-card-top">
-                    <span class="metric-label">This Month Spend</span>
-                    <div class="metric-icon-wrap icon-amber">📅</div>
+                    <span class="metric-label">Spent in {{ selected_month_label }}</span>
+                    <div class="metric-icon-wrap icon-amber">💸</div>
                 </div>
                 <div class="metric-value">₹{{ "%.2f"|format(monthly_expenses|float) }}</div>
                 <div class="metric-subtitle">
-                    <span>{{ "%.1f"|format((monthly_expenses / budget * 100) if budget > 0 else 0) }}% of ₹{{ "%.0f"|format(budget) }} budget</span>
+                    <span>{{ monthly_count }} transactions logged</span>
                 </div>
             </div>
 
             <div class="metric-card">
                 <div class="metric-card-top">
-                    <span class="metric-label">Recurring Burn</span>
-                    <div class="metric-icon-wrap icon-rose">🔄</div>
+                    <span class="metric-label">Monthly Budget</span>
+                    <div class="metric-icon-wrap icon-cyan">🎯</div>
                 </div>
-                <div class="metric-value">₹{{ "%.2f"|format(sub_summary.monthly_recurring|float) }}</div>
+                <div class="metric-value">₹{{ "%.2f"|format(budget|float) }}</div>
                 <div class="metric-subtitle">
-                    <span>{{ sub_summary.active_count }} active subscriptions</span>
+                    <button class="btn btn-secondary btn-sm" data-modal-target="budgetModal" style="padding: 0.15rem 0.5rem; font-size: 0.75rem;">Edit Budget</button>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-card-top">
+                    <span class="metric-label">Remaining Budget</span>
+                    <div class="metric-icon-wrap {{ 'icon-rose' if budget_remaining < 0 else 'icon-purple' }}">🛡️</div>
+                </div>
+                <div class="metric-value" style="color: {{ 'var(--danger-text)' if budget_remaining < 0 else 'inherit' }};">
+                    ₹{{ "%.2f"|format(budget_remaining|float) }}
+                </div>
+                <div class="metric-subtitle">
+                    <span>{{ "%.1f"|format((monthly_expenses / budget * 100) if budget > 0 else 0) }}% spent</span>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-card-top">
+                    <span class="metric-label">All-Time Total Spend</span>
+                    <div class="metric-icon-wrap icon-purple">📊</div>
+                </div>
+                <div class="metric-value">₹{{ "%.2f"|format(total_expenses|float) }}</div>
+                <div class="metric-subtitle">
+                    <span>{{ transaction_count }} total entries</span>
                 </div>
             </div>
         </section>
 
-        <!-- ================= AI HEALTH SCORE BANNER ================= -->
-        <section class="ai-health-banner">
-            <div class="ai-health-left">
-                <div class="health-grade-badge">{{ ai_analysis.grade }}</div>
-                <div class="health-info">
-                    <h4>{{ ai_analysis.verdict }} (Health Score: {{ ai_analysis.score }}/100)</h4>
-                    <p>
-                        Daily Burn: <strong>₹{{ "%.2f"|format(ai_analysis.daily_avg|float) }}</strong> &bull;
-                        Month-End Projected: <strong>₹{{ "%.2f"|format(ai_analysis.projected_monthly|float) }}</strong> &bull;
-                        Next Month Est: <strong>₹{{ "%.2f"|format(ai_analysis.forecast_next_month|float) }}</strong>
-                    </p>
-                </div>
-            </div>
-            <a href="/ai-insights" class="btn btn-ai btn-sm">Ask AI Advisor &rarr;</a>
-        </section>
-
-        <!-- ================= 50/30/20 BUDGET BENCHMARK METER ================= -->
-        <section class="budget-widget-card">
-            <div class="budget-widget-header">
-                <div>
-                    <h3 style="font-weight: 700;">50 / 30 / 20 Financial Rule Compliance</h3>
-                    <p style="font-size: 0.88rem; color: var(--text-secondary);">
-                        Comparing your monthly spend against recommended financial health ratios.
-                    </p>
-                </div>
-                <div style="display: flex; gap: 0.5rem;">
-                    <span class="badge-category cat-Education">50% Needs</span>
-                    <span class="badge-category cat-Shopping">30% Wants</span>
-                    <span class="badge-category cat-Salary">20% Savings</span>
-                </div>
-            </div>
-
-            <div style="display: flex; height: 16px; border-radius: var(--radius-full); overflow: hidden; margin: 1rem 0; background: var(--bg-surface-subtle);">
-                <div style="width: {{ compliance.needs_pct }}%; background: #10b981;" title="Needs: {{ compliance.needs_pct }}%"></div>
-                <div style="width: {{ compliance.wants_pct }}%; background: #f59e0b;" title="Wants: {{ compliance.wants_pct }}%"></div>
-                <div style="width: {{ compliance.savings_pct }}%; background: #6366f1;" title="Savings: {{ compliance.savings_pct }}%"></div>
-            </div>
-
-            <div class="budget-meta-row">
-                <span>🛡️ Needs: <strong>{{ compliance.needs_pct }}%</strong> (₹{{ "%.0f"|format(compliance.needs_amount) }})</span>
-                <span>🛍️ Wants: <strong>{{ compliance.wants_pct }}%</strong> (₹{{ "%.0f"|format(compliance.wants_amount) }})</span>
-                <span>💎 Savings: <strong>{{ compliance.savings_pct }}%</strong> (₹{{ "%.0f"|format(compliance.savings_amount) }})</span>
-            </div>
-        </section>
-
-        <!-- ================= CHARTS GRID ================= -->
+        <!-- ================= CHARTS GRID (FULL 12-MONTH TRAJECTORY) ================= -->
         <section class="charts-grid">
             <div class="chart-card">
                 <div class="chart-header">
-                    <h3 class="chart-title">Expense Distribution by Category</h3>
-                    <span style="font-size: 0.82rem; color: var(--text-muted);">All-Time</span>
+                    <h3 class="chart-title">Expense Breakdown by Category</h3>
+                    <span style="font-size: 0.82rem; color: var(--text-muted);">{{ selected_month_label }}</span>
                 </div>
                 <div class="chart-canvas-wrap">
                     <canvas id="categoryChart"></canvas>
@@ -172,8 +152,8 @@
 
             <div class="chart-card">
                 <div class="chart-header">
-                    <h3 class="chart-title">Monthly Trajectory</h3>
-                    <span style="font-size: 0.82rem; color: var(--text-muted);">Historical Trends</span>
+                    <h3 class="chart-title">12-Month Calendar Trajectory (Jan - Dec {{ current_year }})</h3>
+                    <span style="font-size: 0.82rem; color: var(--text-muted);">All 12 Months</span>
                 </div>
                 <div class="chart-canvas-wrap">
                     <canvas id="monthlyChart"></canvas>
@@ -181,14 +161,14 @@
             </div>
         </section>
 
-        <!-- ================= LINKED ACCOUNTS CAROUSEL & GOALS ================= -->
+        <!-- ================= ACCOUNTS & GOALS SUMMARY ================= -->
         <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
 
             <!-- Linked Accounts Preview -->
             <div class="table-card" style="padding: 1.5rem; margin-bottom: 0;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
                     <div>
-                        <h3 style="font-weight: 700;">Banking & Wallet Balances</h3>
+                        <h3 style="font-weight: 700;">Banking & Account Balances</h3>
                         <p style="font-size: 0.85rem; color: var(--text-secondary);">Live balances across linked institutions</p>
                     </div>
                     <a href="/accounts" class="btn btn-secondary btn-sm">Manage &rarr;</a>
@@ -205,11 +185,6 @@
                         <div style="font-family: 'JetBrains Mono'; font-weight: 700; font-size: 1.15rem; margin-top: 0.25rem;">
                             ₹{{ "%.2f"|format(acc.balance) }}
                         </div>
-                        {% if acc.type == 'Credit Card' and acc.card_limit > 0 %}
-                        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.35rem;">
-                            Limit: ₹{{ "%.0f"|format(acc.card_limit) }} ({{ acc.utilization_pct }}% used)
-                        </div>
-                        {% endif %}
                     </div>
                     {% endfor %}
                 </div>
@@ -218,7 +193,7 @@
             <!-- Financial Goals Snapshot -->
             <div class="table-card" style="padding: 1.5rem; margin-bottom: 0;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
-                    <h3 style="font-weight: 700;">Savings Goals</h3>
+                    <h3 style="font-weight: 700;">Savings Pots</h3>
                     <a href="/goals" class="btn btn-secondary btn-sm">All Goals &rarr;</a>
                 </div>
 
@@ -232,9 +207,10 @@
                         <div class="progress-bar-container" style="height: 6px; margin: 0;">
                             <div class="progress-bar-fill progress-success" style="width: {{ goal.percentage }}%;"></div>
                         </div>
-                        <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.25rem;">
-                            ₹{{ "%.0f"|format(goal.current_amount) }} of ₹{{ "%.0f"|format(goal.target_amount) }}
-                        </div>
+                    </div>
+                    {% else %}
+                    <div style="text-align: center; padding: 1.5rem; color: var(--text-muted); font-size: 0.88rem;">
+                        No savings pots yet.<br><a href="/goals" style="color: var(--brand-primary); font-weight: 600;">+ Create a Goal</a>
                     </div>
                     {% endfor %}
                 </div>
@@ -246,11 +222,11 @@
         <section class="table-card">
             <div class="table-header-bar">
                 <div>
-                    <h3 style="font-weight: 700;">Recent Ledger Activity</h3>
-                    <p style="font-size: 0.85rem; color: var(--text-secondary);">Latest 6 recorded transactions</p>
+                    <h3 style="font-weight: 700;">Ledger Activity ({{ selected_month_label }})</h3>
+                    <p style="font-size: 0.85rem; color: var(--text-secondary);">Showing transactions recorded for this period</p>
                 </div>
                 <div style="display: flex; gap: 0.5rem;">
-                    <a href="/transactions" class="btn btn-secondary btn-sm">Full Ledger &rarr;</a>
+                    <a href="/transactions?month={{ selected_month }}" class="btn btn-secondary btn-sm">Full Ledger &rarr;</a>
                     <a href="/add-expense" class="btn btn-primary btn-sm">+ Add Transaction</a>
                 </div>
             </div>
@@ -285,7 +261,9 @@
                 </table>
                 {% else %}
                 <div style="padding: 3rem; text-align: center; color: var(--text-muted);">
-                    <p>No transactions logged yet.</p>
+                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">✨</div>
+                    <p style="font-weight: 600; color: var(--text-primary);">No transactions logged for {{ selected_month_label }}.</p>
+                    <p style="font-size: 0.88rem; margin-top: 0.25rem;">Use the quick add bar above or click + Log Spend to start tracking!</p>
                 </div>
                 {% endif %}
             </div>
@@ -305,85 +283,47 @@
                 <button class="close-modal-btn">&times;</button>
             </div>
             <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1rem;">
-                Type or speak your transaction in natural language.
+                Type naturally (e.g. <em>"450 lunch via upi"</em>, <em>"coffee 120"</em>, <em>"swiggy 380"</em>, <em>"petrol 500"</em>). Press Enter to add!
             </p>
 
             <div class="form-control" style="margin-bottom: 1rem;">
-                <input type="text" id="quickAddInput" class="form-input" placeholder="e.g. Spent ₹650 on Domino's pizza with UPI yesterday" autocomplete="off">
+                <input type="text" id="quickAddInput" class="form-input" placeholder="e.g. 450 lunch via upi or 1200 electricity bill" autocomplete="off">
             </div>
 
             <div style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1.25rem;">
                 <button type="button" class="btn btn-secondary btn-sm quick-chip">"450 lunch via UPI"</button>
-                <button type="button" class="btn btn-secondary btn-sm quick-chip">"Paid 2200 for wifi bill with Credit Card"</button>
-                <button type="button" class="btn btn-secondary btn-sm quick-chip">"Uber cab 380 rs cash yesterday"</button>
+                <button type="button" class="btn btn-secondary btn-sm quick-chip">"coffee 120"</button>
+                <button type="button" class="btn btn-secondary btn-sm quick-chip">"swiggy 380"</button>
+                <button type="button" class="btn btn-secondary btn-sm quick-chip">"petrol 500"</button>
+                <button type="button" class="btn btn-secondary btn-sm quick-chip">"1200 wifi bill"</button>
             </div>
 
             <div id="quickAddPreview" style="display: none; background: var(--bg-surface-subtle); padding: 0.85rem; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); margin-bottom: 1.25rem;"></div>
 
             <div style="display: flex; gap: 0.75rem;">
-                <button type="button" id="quickAddParseBtn" class="btn btn-secondary" style="flex: 1;">Preview</button>
-                <button type="button" id="quickAddSubmitBtn" class="btn btn-ai" style="flex: 2;">⚡ Confirm & Add</button>
+                <button type="button" id="quickAddSubmitBtn" class="btn btn-ai" style="width: 100%; padding: 0.75rem;">⚡ Confirm & Add Expense</button>
             </div>
         </div>
     </div>
 
-    <!-- 2. TRANSFER MODAL -->
-    <div id="transferModal" class="modal-overlay">
+    <!-- 2. SET BUDGET MODAL -->
+    <div id="budgetModal" class="modal-overlay">
         <div class="modal-card">
             <div class="modal-header">
-                <h3 style="font-weight: 800;">💸 Transfer Money Between Accounts</h3>
+                <h3 style="font-weight: 800;">⚙️ Set Monthly Target Budget</h3>
                 <button class="close-modal-btn">&times;</button>
             </div>
-            <form action="/api/accounts/transfer" method="POST">
-                <div class="form-control" style="margin-bottom: 1rem;">
-                    <label for="from_acc">From Account</label>
-                    <select name="from_account_id" id="from_acc" class="form-select" required>
-                        {% for acc in accounts %}
-                        <option value="{{ acc.id }}">{{ acc.icon }} {{ acc.name }} (₹{{ "%.2f"|format(acc.balance) }})</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="form-control" style="margin-bottom: 1rem;">
-                    <label for="to_acc">To Account</label>
-                    <select name="to_account_id" id="to_acc" class="form-select" required>
-                        {% for acc in accounts %}
-                        <option value="{{ acc.id }}" {% if loop.index == 2 %}selected{% endif %}>{{ acc.icon }} {{ acc.name }} (₹{{ "%.2f"|format(acc.balance) }})</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="form-control" style="margin-bottom: 1rem;">
-                    <label for="transfer_amt">Amount (₹)</label>
-                    <input type="number" name="amount" id="transfer_amt" class="form-input" min="1" step="0.01" placeholder="0.00" required>
-                </div>
+            <form action="/set-budget" method="POST">
                 <div class="form-control" style="margin-bottom: 1.25rem;">
-                    <label for="transfer_notes">Notes / Purpose</label>
-                    <input type="text" name="notes" id="transfer_notes" class="form-input" placeholder="e.g. Credit card payment, Wallet topup">
+                    <label for="monthly_budget">Monthly Budget Target (₹)</label>
+                    <input type="number" name="monthly_budget" id="monthly_budget" class="form-input" value="{{ '%.0f'|format(budget) }}" min="0" step="any" placeholder="e.g. 25000, 30000, 50000" required>
                 </div>
-                <button type="submit" class="btn btn-primary" style="width: 100%;">Complete Transfer</button>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Save Budget</button>
             </form>
         </div>
     </div>
 
-    <!-- 3. AI RECEIPT SCANNER MODAL -->
-    <div id="receiptModal" class="modal-overlay">
-        <div class="modal-card">
-            <div class="modal-header">
-                <h3 style="font-weight: 800; display: flex; align-items: center; gap: 0.5rem;">
-                    <span>📸</span> AI Receipt & Bill Scanner
-                </h3>
-                <button class="close-modal-btn">&times;</button>
-            </div>
-            <div id="receiptDropZone" style="border: 2px dashed var(--border-strong); border-radius: var(--radius-md); padding: 2rem; text-align: center; cursor: pointer; margin-bottom: 1rem; background: var(--bg-surface-subtle);">
-                <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">📁</div>
-                <p style="font-weight: 600;">Drag & drop receipt here, or <span style="color: var(--brand-primary);">browse</span></p>
-                <input type="file" id="receiptFileInput" accept="image/*" style="display: none;">
-            </div>
-            <div id="receiptScanStatus" style="display: none; text-align: center; color: var(--brand-primary); font-weight: 600; margin-bottom: 1rem;"></div>
-            <div id="receiptScanResult" style="display: none; margin-bottom: 1rem;"></div>
-        </div>
-    </div>
-
-    <!-- Chart Script -->
+    <!-- Chart Script (Jan to Dec 12-Month Progression) -->
     <script>
         const categoryLabels = {{ category_data | map(attribute='category') | list | tojson }};
         const categoryValues = {{ category_data | map(attribute='total') | map('float') | list | tojson }};
@@ -404,7 +344,7 @@
                 catChartInstance = new Chart(catCtx, {
                     type: "doughnut",
                     data: {
-                        labels: categoryLabels.length ? categoryLabels : ["No Data"],
+                        labels: categoryLabels.length ? categoryLabels : ["No Expenses Yet"],
                         datasets: [{
                             data: categoryValues.length ? categoryValues : [1],
                             backgroundColor: ["#f97316", "#0ea5e9", "#a855f7", "#eab308", "#10b981", "#ef4444", "#ec4899", "#64748b"],
@@ -435,12 +375,12 @@
                 monthChartInstance = new Chart(monthCtx, {
                     type: "bar",
                     data: {
-                        labels: monthLabels.length ? monthLabels : ["Current"],
+                        labels: monthLabels.length ? monthLabels : ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
                         datasets: [{
                             label: "Total Expenses (₹)",
-                            data: monthValues.length ? monthValues : [0],
-                            backgroundColor: "rgba(79, 70, 229, 0.75)",
-                            hoverBackgroundColor: "rgba(79, 70, 229, 1)",
+                            data: monthValues.length ? monthValues : [0,0,0,0,0,0,0,0,0,0,0,0],
+                            backgroundColor: "rgba(99, 102, 241, 0.75)",
+                            hoverBackgroundColor: "rgba(99, 102, 241, 1)",
                             borderRadius: 6
                         }]
                     },
@@ -449,8 +389,8 @@
                         maintainAspectRatio: false,
                         plugins: { legend: { display: false } },
                         scales: {
-                            x: { grid: { display: false }, ticks: { color: textColor, font: { family: 'Plus Jakarta Sans' } } },
-                            y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: textColor, callback: (v) => '₹' + v } }
+                            x: { grid: { display: false }, ticks: { color: textColor, font: { family: 'Plus Jakarta Sans', size: 11 } } },
+                            y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: textColor, callback: (v) => '₹' + v.toLocaleString() } }
                         }
                     }
                 });
