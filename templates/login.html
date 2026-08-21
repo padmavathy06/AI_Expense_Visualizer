@@ -3,7 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - AI Expense Visualizer</title>
+    <title>AI Expense Visualizer | AI-Powered Expense Tracker</title>
+
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="AI Expense Visualizer is an AI-powered expense tracker that helps users track, analyze, visualize, and understand their personal expenses.">
+    <meta name="keywords" content="AI Expense Visualizer, AI expense tracker, expense tracker, personal expense tracker, expense management, expense analytics, AI financial insights, spending analysis">
+    <meta name="author" content="AI Expense Visualizer">
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
+    
+    <!-- Canonical URL -->
+    <link rel="canonical" href="{{ site_url }}/login">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="AI Expense Visualizer">
+    <meta property="og:title" content="AI Expense Visualizer | AI-Powered Expense Tracker">
+    <meta property="og:description" content="Track, analyze and understand your expenses with AI.">
+    <meta property="og:url" content="{{ site_url }}/login">
+    <meta property="og:image" content="{{ site_url }}/static/img/og-preview.png">
+    <meta property="og:image:alt" content="AI Expense Visualizer - AI-Powered Expense Tracker">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="AI Expense Visualizer | AI-Powered Expense Tracker">
+    <meta name="twitter:description" content="Track, analyze and understand your expenses with AI.">
+    <meta name="twitter:image" content="{{ site_url }}/static/img/og-preview.png">
+
+    {% if google_site_verification %}
+    <!-- Google Search Console Verification -->
+    <meta name="google-site-verification" content="{{ google_site_verification }}">
+    {% endif %}
+
+    <!-- Structured Data (JSON-LD) for Google Search -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "AI Expense Visualizer",
+      "alternateName": "AI Expense Tracker",
+      "url": "{{ site_url }}",
+      "description": "AI Expense Visualizer is an AI-powered expense tracker that helps users track, analyze, visualize, and understand their personal expenses.",
+      "applicationCategory": "FinanceApplication",
+      "operatingSystem": "Web, Android, iOS, Windows, macOS, Linux",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "featureList": [
+        "AI-Powered Natural Language Expense Logging",
+        "Interactive 12-Month Expense Trajectory Charts",
+        "Multi-Account Banking & Net Worth Tracker",
+        "Category Spending Breakdown & Budget Alerts",
+        "Automated Recurring Subscription Tracking",
+        "Savings Goals & Target Progress Tracking",
+        "Financial Health Diagnostics & Monte Carlo Forecasts"
+      ]
+    }
+    </script>
+
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <style>
         .auth-wrapper {
@@ -40,7 +98,7 @@
         }
         .auth-card {
             width: 100%;
-            max-width: 440px;
+            max-width: 460px;
             background: #0f172a;
             border: 1px solid rgba(255, 255, 255, 0.12);
             border-radius: var(--radius-lg);
@@ -52,23 +110,43 @@
         }
         .auth-brand {
             display: flex;
+            flex-direction: column;
             align-items: center;
-            gap: 0.75rem;
+            gap: 0.4rem;
             margin-bottom: 1.75rem;
-            justify-content: center;
+            text-align: center;
         }
-        .auth-title {
-            font-size: 1.6rem;
+        .brand-header-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.65rem;
+        }
+        .brand-name {
+            font-size: 1.5rem;
             font-weight: 800;
             color: #f8fafc;
-            text-align: center;
-            margin-bottom: 0.35rem;
+            letter-spacing: -0.02em;
         }
-        .auth-subtitle {
+        .brand-tagline {
             font-size: 0.9rem;
             color: #94a3b8;
+            font-weight: 500;
+            margin: 0;
+            line-height: 1.4;
+        }
+        .auth-title {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: #e2e8f0;
             text-align: center;
-            margin-bottom: 1.75rem;
+            margin-bottom: 0.25rem;
+        }
+        .auth-subtitle {
+            font-size: 0.86rem;
+            color: #64748b;
+            text-align: center;
+            margin-bottom: 1.5rem;
         }
         .password-toggle-wrap {
             position: relative;
@@ -141,13 +219,17 @@
     <div class="auth-wrapper">
         <div class="auth-card">
             
+            <!-- Prominent Branding & Tagline -->
             <div class="auth-brand">
-                <div class="logo-icon" style="width: 44px; height: 44px; font-size: 1.4rem;">💰</div>
-                <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;">AI Expense Visualizer</span>
+                <div class="brand-header-row">
+                    <div class="logo-icon" style="width: 44px; height: 44px; font-size: 1.4rem;">💰</div>
+                    <span class="brand-name">AI Expense Visualizer</span>
+                </div>
+                <p class="brand-tagline">Track, analyze and understand your expenses with AI.</p>
             </div>
 
             <h1 class="auth-title">Welcome Back</h1>
-            <p class="auth-subtitle">Log in with your Email or Mobile number</p>
+            <p class="auth-subtitle">Log in to access your personal dashboard</p>
 
             <!-- Auth Mode Switcher Tabs -->
             <div style="display: flex; background: rgba(30, 41, 59, 0.7); border-radius: var(--radius-sm); padding: 0.3rem; margin-bottom: 1.5rem; border: 1px solid rgba(255,255,255,0.1);">

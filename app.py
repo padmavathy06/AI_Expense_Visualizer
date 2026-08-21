@@ -2,7 +2,7 @@ import os
 import uuid
 from functools import wraps
 from datetime import date, datetime
-from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, Response, session
+from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, Response, session, send_from_directory
 from werkzeug.utils import secure_filename
 try:
     from dotenv import load_dotenv
@@ -47,6 +47,25 @@ def allowed_image_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_IMAGE_EXTENSIONS
 
 
+def get_canonical_site_url():
+    """
+    Returns the canonical public site URL for SEO, robots.txt, sitemap.xml, and canonical tags.
+    Defaults to deployed URL: https://expense-visualizer-app.onrender.com
+    """
+    env_site_url = os.getenv("SITE_URL", "").strip()
+    if env_site_url:
+        return env_site_url.rstrip("/")
+    
+    # If deployed on Render or cloud host, detect from incoming request
+    if request:
+        host = (request.host or "").lower()
+        if "127.0.0.1" not in host and "localhost" not in host and host:
+            scheme = request.headers.get("X-Forwarded-Proto", request.scheme or "https")
+            return f"{scheme}://{request.host}".rstrip("/")
+            
+    return "https://expense-visualizer-app.onrender.com"
+
+
 # ============================================================================
 # AUTHENTICATION DECORATOR & CONTEXT PROCESSOR
 # ============================================================================
@@ -67,12 +86,15 @@ def login_required(f):
 
 
 @app.context_processor
-def inject_current_user():
+def inject_global_seo_and_user():
+    site_url = get_canonical_site_url()
+
     user_dict = None
     if "user_id" in session:
         user = auth_service.get_user_by_id(session.get("user_id"))
         if user:
             user_dict = user
+            session["user_avatar"] = user.get("avatar") or ""
         else:
             user_dict = {
                 "id": session.get("user_id"),
@@ -80,7 +102,83 @@ def inject_current_user():
                 "email": session.get("user_email"),
                 "avatar": session.get("user_avatar", "")
             }
-    return {"current_user": user_dict}
+
+    return {
+        "current_user": user_dict,
+        "site_url": site_url,
+        "site_name": "AI Expense Visualizer",
+        "site_title": "AI Expense Visualizer | AI-Powered Expense Tracker",
+        "site_tagline": "Track, analyze and understand your expenses with AI.",
+        "site_description": "AI Expense Visualizer is an AI-powered expense tracker that helps users track, analyze, visualize, and understand their personal expenses.",
+        "site_keywords": "AI Expense Visualizer, AI expense tracker, expense tracker, personal expense tracker, expense management, expense analytics, AI financial insights, spending analysis",
+        "google_site_verification": os.getenv("GOOGLE_SITE_VERIFICATION", "")
+    }
+
+
+# ============================================================================
+# SEARCH ENGINE OPTIMIZATION (ROBOTS.TXT & SITEMAP.XML)
+# ============================================================================
+
+@app.route("/robots.txt", methods=["GET"])
+def robots_txt():
+    site_url = get_canonical_site_url()
+    content = f"""# robots.txt for AI Expense Visualizer
+User-agent: *
+Allow: /
+Allow: /login
+Allow: /register
+Allow: /static/
+Disallow: /transactions
+Disallow: /expenses
+Disallow: /accounts
+Disallow: /subscriptions
+Disallow: /goals
+Disallow: /analytics
+Disallow: /ai-insights
+Disallow: /profile
+Disallow: /import
+Disallow: /add-expense
+Disallow: /edit-expense/
+Disallow: /delete-expense/
+Disallow: /api/
+Disallow: /logout
+
+# Sitemap Location
+Sitemap: {site_url}/sitemap.xml
+"""
+    response = Response(content, mimetype="text/plain")
+    response.headers["Content-Type"] = "text/plain; charset=utf-8"
+    return response
+
+
+@app.route("/sitemap.xml", methods=["GET"])
+def sitemap_xml():
+    site_url = get_canonical_site_url()
+    today = date.today().isoformat()
+    xml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+        <loc>{site_url}/</loc>
+        <lastmod>{today}</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>1.0</priority>
+    </url>
+    <url>
+        <loc>{site_url}/login</loc>
+        <lastmod>{today}</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.9</priority>
+    </url>
+    <url>
+        <loc>{site_url}/register</loc>
+        <lastmod>{today}</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.8</priority>
+    </url>
+</urlset>"""
+    response = Response(xml_content, mimetype="application/xml")
+    response.headers["Content-Type"] = "application/xml; charset=utf-8"
+    return response
 
 
 # ============================================================================

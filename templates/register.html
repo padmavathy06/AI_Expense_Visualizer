@@ -3,7 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Create Account - AI Expense Visualizer</title>
+    <title>Create Account | AI Expense Visualizer | AI-Powered Expense Tracker</title>
+
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="AI Expense Visualizer is an AI-powered expense tracker that helps users track, analyze, visualize, and understand their personal expenses.">
+    <meta name="keywords" content="AI Expense Visualizer, AI expense tracker, expense tracker, personal expense tracker, expense management, expense analytics, AI financial insights, spending analysis">
+    <meta name="author" content="AI Expense Visualizer">
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
+    
+    <!-- Canonical URL -->
+    <link rel="canonical" href="{{ site_url }}/register">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="AI Expense Visualizer">
+    <meta property="og:title" content="AI Expense Visualizer | AI-Powered Expense Tracker">
+    <meta property="og:description" content="Track, analyze and understand your expenses with AI.">
+    <meta property="og:url" content="{{ site_url }}/register">
+    <meta property="og:image" content="{{ site_url }}/static/img/og-preview.png">
+    <meta property="og:image:alt" content="AI Expense Visualizer - AI-Powered Expense Tracker">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="AI Expense Visualizer | AI-Powered Expense Tracker">
+    <meta name="twitter:description" content="Track, analyze and understand your expenses with AI.">
+    <meta name="twitter:image" content="{{ site_url }}/static/img/og-preview.png">
+
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <style>
         .auth-wrapper {
@@ -52,21 +77,41 @@
         }
         .auth-brand {
             display: flex;
+            flex-direction: column;
             align-items: center;
-            gap: 0.75rem;
+            gap: 0.4rem;
             margin-bottom: 1.75rem;
-            justify-content: center;
+            text-align: center;
         }
-        .auth-title {
-            font-size: 1.6rem;
+        .brand-header-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.65rem;
+        }
+        .brand-name {
+            font-size: 1.5rem;
             font-weight: 800;
             color: #f8fafc;
+            letter-spacing: -0.02em;
+        }
+        .brand-tagline {
+            font-size: 0.9rem;
+            color: #94a3b8;
+            font-weight: 500;
+            margin: 0;
+            line-height: 1.4;
+        }
+        .auth-title {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: #e2e8f0;
             text-align: center;
-            margin-bottom: 0.35rem;
+            margin-bottom: 0.25rem;
         }
         .auth-subtitle {
-            font-size: 0.88rem;
-            color: #94a3b8;
+            font-size: 0.86rem;
+            color: #64748b;
             text-align: center;
             margin-bottom: 1.5rem;
         }
@@ -141,9 +186,13 @@
     <div class="auth-wrapper">
         <div class="auth-card">
             
+            <!-- Prominent Branding & Tagline -->
             <div class="auth-brand">
-                <div class="logo-icon" style="width: 44px; height: 44px; font-size: 1.4rem;">💰</div>
-                <span style="font-size: 1.25rem; font-weight: 800; color: #f8fafc;">AI Expense Visualizer</span>
+                <div class="brand-header-row">
+                    <div class="logo-icon" style="width: 44px; height: 44px; font-size: 1.4rem;">💰</div>
+                    <span class="brand-name">AI Expense Visualizer</span>
+                </div>
+                <p class="brand-tagline">Track, analyze and understand your expenses with AI.</p>
             </div>
 
             <h1 class="auth-title">Create Account</h1>

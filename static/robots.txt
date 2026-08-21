@@ -1,0 +1,23 @@
+# robots.txt for AI Expense Visualizer
+User-agent: *
+Allow: /
+Allow: /login
+Allow: /register
+Allow: /static/
+Disallow: /transactions
+Disallow: /expenses
+Disallow: /accounts
+Disallow: /subscriptions
+Disallow: /goals
+Disallow: /analytics
+Disallow: /ai-insights
+Disallow: /profile
+Disallow: /import
+Disallow: /add-expense
+Disallow: /edit-expense/
+Disallow: /delete-expense/
+Disallow: /api/
+Disallow: /logout
+
+# Sitemap Location
+Sitemap: https://expense-visualizer-app.onrender.com/sitemap.xml
