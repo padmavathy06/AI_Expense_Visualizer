@@ -11,11 +11,14 @@ DEFAULT_GOAL_ICONS = {
 }
 
 
-def get_goals():
-    """Fetches all savings goals with completion percentage and milestone status."""
+def get_goals(user_id=None):
+    """Fetches all savings goals for user_id with completion percentage and milestone status."""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM financial_goals ORDER BY target_date ASC, id ASC")
+    if user_id is not None:
+        cursor.execute("SELECT * FROM financial_goals WHERE user_id = %s ORDER BY target_date ASC, id ASC", (user_id,))
+    else:
+        cursor.execute("SELECT * FROM financial_goals ORDER BY target_date ASC, id ASC")
     goals = cursor.fetchall()
 
     today = date.today()
@@ -29,7 +32,6 @@ def get_goals():
         g["remaining_amount"] = round(max(0.0, target - current), 2)
         g["is_completed"] = current >= target
 
-        # Calculate days until target
         try:
             t_date = g["target_date"]
             if isinstance(t_date, str):
@@ -44,8 +46,8 @@ def get_goals():
 
 
 def create_goal(title, target_amount, current_amount=0.0, target_date=None,
-                category="General", color="#10b981", icon=None):
-    """Creates a financial savings goal."""
+                category="General", color="#10b981", icon=None, user_id=None):
+    """Creates a financial savings goal for user_id."""
     if not target_date:
         from datetime import timedelta
         target_date = (date.today() + timedelta(days=180)).isoformat()
@@ -55,9 +57,9 @@ def create_goal(title, target_amount, current_amount=0.0, target_date=None,
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO financial_goals (title, target_amount, current_amount, target_date, category, color, icon, status)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, 'in_progress')
-    """, (title, target_amount, current_amount, target_date, category, color, icon))
+        INSERT INTO financial_goals (user_id, title, target_amount, current_amount, target_date, category, color, icon, status)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'in_progress')
+    """, (user_id, title, target_amount, current_amount, target_date, category, color, icon))
     conn.commit()
     new_id = cursor.lastrowid
     cursor.close()
@@ -65,21 +67,28 @@ def create_goal(title, target_amount, current_amount=0.0, target_date=None,
     return new_id
 
 
-def update_goal(goal_id, title, target_amount, current_amount, target_date, category="General", color="#10b981", icon="🎯", status="in_progress"):
+def update_goal(goal_id, title, target_amount, current_amount, target_date, category="General", color="#10b981", icon="🎯", status="in_progress", user_id=None):
     """Updates existing goal."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE financial_goals
-        SET title = %s, target_amount = %s, current_amount = %s, target_date = %s, category = %s, color = %s, icon = %s, status = %s
-        WHERE id = %s
-    """, (title, target_amount, current_amount, target_date, category, color, icon, status, goal_id))
+    if user_id is not None:
+        cursor.execute("""
+            UPDATE financial_goals
+            SET title = %s, target_amount = %s, current_amount = %s, target_date = %s, category = %s, color = %s, icon = %s, status = %s
+            WHERE id = %s AND user_id = %s
+        """, (title, target_amount, current_amount, target_date, category, color, icon, status, goal_id, user_id))
+    else:
+        cursor.execute("""
+            UPDATE financial_goals
+            SET title = %s, target_amount = %s, current_amount = %s, target_date = %s, category = %s, color = %s, icon = %s, status = %s
+            WHERE id = %s
+        """, (title, target_amount, current_amount, target_date, category, color, icon, status, goal_id))
     conn.commit()
     cursor.close()
     conn.close()
 
 
-def contribute_to_goal(goal_id, amount, from_account_id=None):
+def contribute_to_goal(goal_id, amount, from_account_id=None, user_id=None):
     """
     Deposits money towards a goal. Optionally deducts from a source bank account.
     """
@@ -87,9 +96,14 @@ def contribute_to_goal(goal_id, amount, from_account_id=None):
     cursor = conn.cursor()
 
     try:
-        cursor.execute("UPDATE financial_goals SET current_amount = current_amount + %s WHERE id = %s", (amount, goal_id))
-        if from_account_id:
-            cursor.execute("UPDATE accounts SET balance = balance - %s WHERE id = %s", (amount, from_account_id))
+        if user_id is not None:
+            cursor.execute("UPDATE financial_goals SET current_amount = current_amount + %s WHERE id = %s AND user_id = %s", (amount, goal_id, user_id))
+            if from_account_id:
+                cursor.execute("UPDATE accounts SET balance = balance - %s WHERE id = %s AND user_id = %s", (amount, from_account_id, user_id))
+        else:
+            cursor.execute("UPDATE financial_goals SET current_amount = current_amount + %s WHERE id = %s", (amount, goal_id))
+            if from_account_id:
+                cursor.execute("UPDATE accounts SET balance = balance - %s WHERE id = %s", (amount, from_account_id))
 
         conn.commit()
     except Exception as e:
@@ -100,19 +114,22 @@ def contribute_to_goal(goal_id, amount, from_account_id=None):
         conn.close()
 
 
-def delete_goal(goal_id):
+def delete_goal(goal_id, user_id=None):
     """Deletes a financial goal."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM financial_goals WHERE id = %s", (goal_id,))
+    if user_id is not None:
+        cursor.execute("DELETE FROM financial_goals WHERE id = %s AND user_id = %s", (goal_id, user_id))
+    else:
+        cursor.execute("DELETE FROM financial_goals WHERE id = %s", (goal_id,))
     conn.commit()
     cursor.close()
     conn.close()
 
 
-def seed_default_goals():
-    """Seeds starter financial goals if none exist."""
-    goals = get_goals()
+def seed_default_goals(user_id=None):
+    """Seeds starter financial goals for user_id."""
+    goals = get_goals(user_id=user_id)
     if not goals:
         from datetime import timedelta
         today = date.today()
@@ -123,4 +140,4 @@ def seed_default_goals():
             ("Electric Vehicle Downpayment", 300000.00, 95000.00, (today + timedelta(days=365)).isoformat(), "Vehicle", "#06b6d4", "🚗")
         ]
         for title, target, current, t_date, cat, color, icon in defaults:
-            create_goal(title, target, current, t_date, cat, color, icon)
+            create_goal(title, target, current, t_date, cat, color, icon, user_id=user_id)

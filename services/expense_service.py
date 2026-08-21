@@ -13,7 +13,7 @@ MONTH_NAMES = [
 ]
 
 
-def get_available_years():
+def get_available_years(user_id=None):
     """Returns a selectable multi-year range."""
     current_y = date.today().year
     years_set = set(range(current_y - 5, current_y + 6))
@@ -21,7 +21,10 @@ def get_available_years():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT DISTINCT YEAR(expense_date) as y FROM expenses")
+        if user_id is not None:
+            cursor.execute("SELECT DISTINCT YEAR(expense_date) as y FROM expenses WHERE user_id = %s", (user_id,))
+        else:
+            cursor.execute("SELECT DISTINCT YEAR(expense_date) as y FROM expenses")
         for r in cursor.fetchall():
             if r.get("y"):
                 years_set.add(int(r["y"]))
@@ -56,15 +59,9 @@ def get_available_months(target_year=None):
     return months_list
 
 
-def get_common_dashboard_data(target_year=None, target_month=None, target_date=None):
+def get_common_dashboard_data(target_year=None, target_month=None, target_date=None, user_id=None):
     """
-    Fetches clean dashboard metrics based on selected date or month:
-    - If target_date is specified (e.g., '2026-08-20'), isolates expenses for that month ('2026-08').
-    - Specific Month Spent & All-Time Spent
-    - Monthly Budget & Remaining
-    - Category breakdown
-    - Full 12-Month Jan to Dec Trajectory
-    - Accounts, Subscriptions, and Goals summaries
+    Fetches clean dashboard metrics based on selected date or month, strictly isolated for user_id.
     """
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -94,25 +91,29 @@ def get_common_dashboard_data(target_year=None, target_month=None, target_date=N
         if not selected_date_str and selected_month_key != "all":
             selected_date_str = today_iso
 
+    # User isolation condition helper
+    user_cond = "user_id = %s" if user_id is not None else "1=1"
+    user_param = [user_id] if user_id is not None else []
+
     # 1. Total All-Time Spend
-    cursor.execute("SELECT COALESCE(SUM(amount), 0) AS total, COUNT(*) AS count FROM expenses")
+    cursor.execute(f"SELECT COALESCE(SUM(amount), 0) AS total, COUNT(*) AS count FROM expenses WHERE {user_cond}", tuple(user_param))
     total_row = cursor.fetchone()
     total_expenses = float(total_row["total"]) if total_row else 0.0
     transaction_count = int(total_row["count"]) if total_row else 0
 
     # 2. Selected Month / Period Spend
     if selected_month_key == "all":
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT COALESCE(SUM(amount), 0) AS monthly_total, COUNT(*) AS count
             FROM expenses
-            WHERE YEAR(expense_date) = %s
-        """, (current_year,))
+            WHERE {user_cond} AND YEAR(expense_date) = %s
+        """, tuple(user_param + [current_year]))
     else:
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT COALESCE(SUM(amount), 0) AS monthly_total, COUNT(*) AS count
             FROM expenses
-            WHERE DATE_FORMAT(expense_date, '%Y-%m') = %s
-        """, (selected_month_key,))
+            WHERE {user_cond} AND DATE_FORMAT(expense_date, '%Y-%m') = %s
+        """, tuple(user_param + [selected_month_key]))
 
     month_row = cursor.fetchone()
     monthly_expenses = float(month_row["monthly_total"]) if month_row else 0.0
@@ -120,20 +121,20 @@ def get_common_dashboard_data(target_year=None, target_month=None, target_date=N
 
     # 3. Transactions for selected period
     if selected_month_key == "all":
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT *
             FROM expenses
-            WHERE YEAR(expense_date) = %s
+            WHERE {user_cond} AND YEAR(expense_date) = %s
             ORDER BY expense_date DESC, id DESC
             LIMIT 15
-        """, (current_year,))
+        """, tuple(user_param + [current_year]))
     else:
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT *
             FROM expenses
-            WHERE DATE_FORMAT(expense_date, '%Y-%m') = %s
+            WHERE {user_cond} AND DATE_FORMAT(expense_date, '%Y-%m') = %s
             ORDER BY expense_date DESC, id DESC
-        """, (selected_month_key,))
+        """, tuple(user_param + [selected_month_key]))
 
     recent_expenses = cursor.fetchall()
     for e in recent_expenses:
@@ -141,37 +142,37 @@ def get_common_dashboard_data(target_year=None, target_month=None, target_date=N
 
     # 4. Category-wise Distribution
     if selected_month_key == "all":
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT category, SUM(amount) AS total, COUNT(*) as count
             FROM expenses
-            WHERE YEAR(expense_date) = %s
+            WHERE {user_cond} AND YEAR(expense_date) = %s
             GROUP BY category
             ORDER BY total DESC
-        """, (current_year,))
+        """, tuple(user_param + [current_year]))
     else:
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT category, SUM(amount) AS total, COUNT(*) as count
             FROM expenses
-            WHERE DATE_FORMAT(expense_date, '%Y-%m') = %s
+            WHERE {user_cond} AND DATE_FORMAT(expense_date, '%Y-%m') = %s
             GROUP BY category
             ORDER BY total DESC
-        """, (selected_month_key,))
+        """, tuple(user_param + [selected_month_key]))
 
     category_data = cursor.fetchall()
     for c in category_data:
         c["total"] = float(c.get("total") or 0.0)
 
     # 5. FULL 12-MONTH (January to December) Trajectory Chart Data
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT
             MONTH(expense_date) AS month_num,
             SUM(amount) AS total,
             COUNT(*) as count
         FROM expenses
-        WHERE YEAR(expense_date) = %s
+        WHERE {user_cond} AND YEAR(expense_date) = %s
         GROUP BY MONTH(expense_date)
         ORDER BY month_num ASC
-    """, (current_year,))
+    """, tuple(user_param + [current_year]))
     month_db_rows = cursor.fetchall()
     month_spend_map = {int(r["month_num"]): float(r["total"]) for r in month_db_rows}
 
@@ -186,24 +187,31 @@ def get_common_dashboard_data(target_year=None, target_month=None, target_date=N
         })
 
     # 6. Payment Method Breakdown
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT COALESCE(payment_method, 'Other') AS payment_method, SUM(amount) AS total
         FROM expenses
+        WHERE {user_cond}
         GROUP BY payment_method
         ORDER BY total DESC
-    """)
+    """, tuple(user_param))
     payment_data = cursor.fetchall()
     for p in payment_data:
         p["total"] = float(p.get("total") or 0.0)
 
     # 7. Monthly Budget
-    cursor.execute("SELECT monthly_budget FROM budget ORDER BY id DESC LIMIT 1")
+    if user_id is not None:
+        cursor.execute("SELECT monthly_budget FROM budget WHERE user_id = %s ORDER BY id DESC LIMIT 1", (user_id,))
+    else:
+        cursor.execute("SELECT monthly_budget FROM budget ORDER BY id DESC LIMIT 1")
     budget_row = cursor.fetchone()
     budget = float(budget_row["monthly_budget"]) if budget_row else 25000.00
     budget_remaining = budget - monthly_expenses
 
     # 8. Category Budgets
-    cursor.execute("SELECT category, allocated_amount FROM category_budgets")
+    if user_id is not None:
+        cursor.execute("SELECT category, allocated_amount FROM category_budgets WHERE user_id = %s", (user_id,))
+    else:
+        cursor.execute("SELECT category, allocated_amount FROM category_budgets")
     cat_budgets = {row["category"]: float(row["allocated_amount"]) for row in cursor.fetchall()}
 
     category_budget_comparison = []
@@ -225,13 +233,13 @@ def get_common_dashboard_data(target_year=None, target_month=None, target_date=N
     conn.close()
 
     # 9. Accounts, Subscriptions, Goals summaries
-    net_worth_summary = account_service.get_net_worth_summary()
-    sub_summary = subscription_service.get_subscription_summary()
-    goals = goal_service.get_goals()
+    net_worth_summary = account_service.get_net_worth_summary(user_id=user_id)
+    sub_summary = subscription_service.get_subscription_summary(user_id=user_id)
+    goals = goal_service.get_goals(user_id=user_id)
     compliance = analytics_service.get_50_30_20_compliance(category_data)
 
     all_12_months = get_available_months(current_year)
-    available_years = get_available_years()
+    available_years = get_available_years(user_id=user_id)
 
     if selected_month_key == "all":
         selected_month_label = f"Full Year {current_year}"
@@ -271,19 +279,23 @@ def get_common_dashboard_data(target_year=None, target_month=None, target_date=N
     }
 
 
-def get_dashboard_data():
-    return get_common_dashboard_data()
+def get_dashboard_data(user_id=None):
+    return get_common_dashboard_data(user_id=user_id)
 
 
-def get_filtered_expenses(search=None, category=None, payment_method=None,
+def get_filtered_expenses(user_id=None, search=None, category=None, payment_method=None,
                           start_date=None, end_date=None, target_month=None,
                           target_year=None, sort_by="expense_date", sort_order="DESC"):
-    """Query expenses across all dates, months, years with full-text search and filters."""
+    """Query expenses across all dates, months, years with full-text search and user isolation."""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
     conditions = []
     params = []
+
+    if user_id is not None:
+        conditions.append("user_id = %s")
+        params.append(user_id)
 
     if target_month and target_month != "all":
         conditions.append("DATE_FORMAT(expense_date, '%Y-%m') = %s")
@@ -335,20 +347,21 @@ def get_filtered_expenses(search=None, category=None, payment_method=None,
     return results
 
 
-def add_expense(amount, category, description, expense_date, payment_method):
+def add_expense(amount, category, description, expense_date, payment_method, user_id=None):
+    """Logs expense permanently associated with user_id."""
     conn = get_db_connection()
     cursor = conn.cursor()
 
     query = """
-        INSERT INTO expenses (amount, category, description, expense_date, payment_method)
-        VALUES (%s, %s, %s, %s, %s)
+        INSERT INTO expenses (user_id, amount, category, description, expense_date, payment_method)
+        VALUES (%s, %s, %s, %s, %s, %s)
     """
-    cursor.execute(query, (amount, category, description, expense_date, payment_method))
+    cursor.execute(query, (user_id, amount, category, description, expense_date, payment_method))
 
     cursor.execute("""
-        INSERT INTO transactions (type, amount, category, description, transaction_date, payment_method)
-        VALUES ('expense', %s, %s, %s, %s, %s)
-    """, (amount, category, description, expense_date, payment_method))
+        INSERT INTO transactions (user_id, type, amount, category, description, transaction_date, payment_method)
+        VALUES (%s, 'expense', %s, %s, %s, %s, %s)
+    """, (user_id, amount, category, description, expense_date, payment_method))
 
     conn.commit()
     new_id = cursor.lastrowid
@@ -357,10 +370,13 @@ def add_expense(amount, category, description, expense_date, payment_method):
     return new_id
 
 
-def get_expense_by_id(expense_id):
+def get_expense_by_id(expense_id, user_id=None):
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM expenses WHERE id = %s", (expense_id,))
+    if user_id is not None:
+        cursor.execute("SELECT * FROM expenses WHERE id = %s AND user_id = %s", (expense_id, user_id))
+    else:
+        cursor.execute("SELECT * FROM expenses WHERE id = %s", (expense_id,))
     row = cursor.fetchone()
     if row:
         row["amount"] = float(row.get("amount") or 0.0)
@@ -369,88 +385,109 @@ def get_expense_by_id(expense_id):
     return row
 
 
-def update_expense(expense_id, amount, category, description, expense_date, payment_method):
+def update_expense(expense_id, amount, category, description, expense_date, payment_method, user_id=None):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE expenses
-        SET amount = %s, category = %s, description = %s, expense_date = %s, payment_method = %s
-        WHERE id = %s
-    """, (amount, category, description, expense_date, payment_method, expense_id))
+    if user_id is not None:
+        cursor.execute("""
+            UPDATE expenses
+            SET amount = %s, category = %s, description = %s, expense_date = %s, payment_method = %s
+            WHERE id = %s AND user_id = %s
+        """, (amount, category, description, expense_date, payment_method, expense_id, user_id))
+    else:
+        cursor.execute("""
+            UPDATE expenses
+            SET amount = %s, category = %s, description = %s, expense_date = %s, payment_method = %s
+            WHERE id = %s
+        """, (amount, category, description, expense_date, payment_method, expense_id))
     conn.commit()
     cursor.close()
     conn.close()
 
 
-def delete_expense(expense_id):
+def delete_expense(expense_id, user_id=None):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM expenses WHERE id = %s", (expense_id,))
-    cursor.execute("DELETE FROM transactions WHERE id = %s", (expense_id,))
+    if user_id is not None:
+        cursor.execute("DELETE FROM expenses WHERE id = %s AND user_id = %s", (expense_id, user_id))
+        cursor.execute("DELETE FROM transactions WHERE id = %s AND user_id = %s", (expense_id, user_id))
+    else:
+        cursor.execute("DELETE FROM expenses WHERE id = %s", (expense_id,))
+        cursor.execute("DELETE FROM transactions WHERE id = %s", (expense_id,))
     conn.commit()
     cursor.close()
     conn.close()
 
 
-def delete_all_expenses():
-    """Wipes ALL recorded expenses and transactions cleanly in 1 click."""
+def delete_all_expenses(user_id=None):
+    """Wipes ALL recorded expenses and transactions for the specified user cleanly in 1 click."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM expenses")
-    cursor.execute("DELETE FROM transactions")
+    if user_id is not None:
+        cursor.execute("DELETE FROM expenses WHERE user_id = %s", (user_id,))
+        cursor.execute("DELETE FROM transactions WHERE user_id = %s", (user_id,))
+    else:
+        cursor.execute("DELETE FROM expenses")
+        cursor.execute("DELETE FROM transactions")
     conn.commit()
     cursor.close()
     conn.close()
 
 
-def delete_multiple_expenses(id_list):
-    """Deletes a selected list of expense IDs."""
+def delete_multiple_expenses(id_list, user_id=None):
+    """Deletes a selected list of expense IDs for the specified user."""
     if not id_list:
         return
     conn = get_db_connection()
     cursor = conn.cursor()
     placeholders = ", ".join(["%s"] * len(id_list))
-    cursor.execute(f"DELETE FROM expenses WHERE id IN ({placeholders})", tuple(id_list))
-    cursor.execute(f"DELETE FROM transactions WHERE id IN ({placeholders})", tuple(id_list))
+    if user_id is not None:
+        cursor.execute(f"DELETE FROM expenses WHERE id IN ({placeholders}) AND user_id = %s", tuple(id_list + [user_id]))
+        cursor.execute(f"DELETE FROM transactions WHERE id IN ({placeholders}) AND user_id = %s", tuple(id_list + [user_id]))
+    else:
+        cursor.execute(f"DELETE FROM expenses WHERE id IN ({placeholders})", tuple(id_list))
+        cursor.execute(f"DELETE FROM transactions WHERE id IN ({placeholders})", tuple(id_list))
     conn.commit()
     cursor.close()
     conn.close()
 
 
-def set_monthly_budget(amount):
+def set_monthly_budget(amount, user_id=None):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO budget (monthly_budget) VALUES (%s)", (amount,))
+    if user_id is not None:
+        cursor.execute("INSERT INTO budget (user_id, monthly_budget) VALUES (%s, %s)", (user_id, amount))
+    else:
+        cursor.execute("INSERT INTO budget (monthly_budget) VALUES (%s)", (amount,))
     conn.commit()
     cursor.close()
     conn.close()
 
 
-def set_category_budget(category, allocated_amount):
+def set_category_budget(category, allocated_amount, user_id=None):
     conn = get_db_connection()
     cursor = conn.cursor()
     if conn.is_sqlite:
         cursor.execute("""
-            INSERT INTO category_budgets (category, allocated_amount)
-            VALUES (%s, %s)
-            ON CONFLICT(category) DO UPDATE SET allocated_amount = %s
-        """, (category, allocated_amount, allocated_amount))
+            INSERT INTO category_budgets (user_id, category, allocated_amount)
+            VALUES (%s, %s, %s)
+        """, (user_id, category, allocated_amount))
     else:
         cursor.execute("""
-            INSERT INTO category_budgets (category, allocated_amount)
-            VALUES (%s, %s)
+            INSERT INTO category_budgets (user_id, category, allocated_amount)
+            VALUES (%s, %s, %s)
             ON DUPLICATE KEY UPDATE allocated_amount = %s
-        """, (category, allocated_amount, allocated_amount))
+        """, (user_id, category, allocated_amount, allocated_amount))
     conn.commit()
     cursor.close()
     conn.close()
 
 
-def seed_sample_data():
-    """Seeds the entire multi-dimensional ecosystem with realistic demo records."""
-    account_service.seed_default_accounts()
-    subscription_service.seed_default_subscriptions()
-    goal_service.seed_default_goals()
+def seed_sample_data(user_id=None):
+    """Seeds the multi-dimensional ecosystem for the given user."""
+    account_service.seed_default_accounts(user_id=user_id)
+    subscription_service.seed_default_subscriptions(user_id=user_id)
+    goal_service.seed_default_goals(user_id=user_id)
 
     sample_txs = [
         (85000.00, "Salary", "Monthly Tech Corp Salary", "2026-08-01", "Bank Transfer", "income"),
@@ -475,7 +512,7 @@ def seed_sample_data():
 
     from services import transaction_service
     for amt, cat, desc, d, pm, t_type in sample_txs:
-        transaction_service.add_transaction(amt, cat, desc, d, pm, txn_type=t_type)
+        transaction_service.add_transaction(amt, cat, desc, d, pm, txn_type=t_type, user_id=user_id)
 
     return len(sample_txs)
 

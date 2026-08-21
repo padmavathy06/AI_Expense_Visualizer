@@ -9,16 +9,20 @@ EXPENSE_CATEGORIES = ["Food", "Travel", "Shopping", "Bills", "Education", "Healt
 INCOME_CATEGORIES = ["Salary", "Freelance", "Investment Returns", "Rental Income", "Gifts", "Cashback", "Other Income"]
 
 
-def get_transactions(txn_type=None, search=None, category=None, account_id=None,
+def get_transactions(user_id=None, txn_type=None, search=None, category=None, account_id=None,
                      start_date=None, end_date=None, sort_by="transaction_date", sort_order="DESC"):
     """
-    Queries unified transactions ledger with full-text search and multi-field filters.
+    Queries unified transactions ledger with full-text search and user isolation.
     """
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
     conditions = []
     params = []
+
+    if user_id is not None:
+        conditions.append("t.user_id = %s")
+        params.append(user_id)
 
     if txn_type and txn_type != "all":
         conditions.append("t.type = %s")
@@ -70,9 +74,9 @@ def get_transactions(txn_type=None, search=None, category=None, account_id=None,
 
 def add_transaction(amount, category, description="", transaction_date=None,
                     payment_method="UPI", txn_type="expense", account_id=None,
-                    merchant=None, tags=None, is_recurring=False):
+                    merchant=None, tags=None, is_recurring=False, user_id=None):
     """
-    Logs transaction and automatically updates account balances and legacy expense tables.
+    Logs transaction and automatically updates account balances and legacy expense tables for user_id.
     """
     if not transaction_date:
         transaction_date = date.today().isoformat()
@@ -82,11 +86,11 @@ def add_transaction(amount, category, description="", transaction_date=None,
 
     # 1. Insert into unified transactions
     query = """
-        INSERT INTO transactions (type, account_id, amount, category, description, merchant, transaction_date, payment_method, tags, is_recurring)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO transactions (user_id, type, account_id, amount, category, description, merchant, transaction_date, payment_method, tags, is_recurring)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
     cursor.execute(query, (
-        txn_type, account_id, amount, category, description,
+        user_id, txn_type, account_id, amount, category, description,
         merchant, transaction_date, payment_method, tags, 1 if is_recurring else 0
     ))
     new_id = cursor.lastrowid
@@ -94,7 +98,6 @@ def add_transaction(amount, category, description="", transaction_date=None,
     # 2. Update linked account balance if account_id is provided
     if account_id:
         if txn_type == "expense":
-            # For Bank/Cash/Wallet: deduct balance. For Credit Card: increase balance (owed amount)
             cursor.execute("""
                 UPDATE accounts
                 SET balance = CASE
@@ -104,7 +107,6 @@ def add_transaction(amount, category, description="", transaction_date=None,
                 WHERE id = %s
             """, (amount, amount, account_id))
         elif txn_type == "income":
-            # For Bank/Cash/Wallet: add balance. For Credit Card: pay down balance
             cursor.execute("""
                 UPDATE accounts
                 SET balance = CASE
@@ -114,12 +116,12 @@ def add_transaction(amount, category, description="", transaction_date=None,
                 WHERE id = %s
             """, (amount, amount, account_id))
 
-    # 3. Synchronize with legacy expenses table for backwards compatibility
+    # 3. Synchronize with expenses table
     if txn_type == "expense":
         cursor.execute("""
-            INSERT INTO expenses (amount, category, description, expense_date, payment_method)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (amount, category, description, transaction_date, payment_method))
+            INSERT INTO expenses (user_id, amount, category, description, expense_date, payment_method)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (user_id, amount, category, description, transaction_date, payment_method))
 
     conn.commit()
     cursor.close()
@@ -127,12 +129,15 @@ def add_transaction(amount, category, description="", transaction_date=None,
     return new_id
 
 
-def delete_transaction(transaction_id):
+def delete_transaction(transaction_id, user_id=None):
     """Deletes transaction and reverts account balances."""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    cursor.execute("SELECT * FROM transactions WHERE id = %s", (transaction_id,))
+    if user_id is not None:
+        cursor.execute("SELECT * FROM transactions WHERE id = %s AND user_id = %s", (transaction_id, user_id))
+    else:
+        cursor.execute("SELECT * FROM transactions WHERE id = %s", (transaction_id,))
     tx = cursor.fetchone()
 
     if tx:
@@ -160,7 +165,10 @@ def delete_transaction(transaction_id):
                     WHERE id = %s
                 """, (amount, amount, account_id))
 
-        cursor.execute("DELETE FROM transactions WHERE id = %s", (transaction_id,))
+        if user_id is not None:
+            cursor.execute("DELETE FROM transactions WHERE id = %s AND user_id = %s", (transaction_id, user_id))
+        else:
+            cursor.execute("DELETE FROM transactions WHERE id = %s", (transaction_id,))
         conn.commit()
 
     cursor.close()
@@ -251,7 +259,6 @@ def parse_bank_statement_csv(csv_text_or_file):
                         txn_type = "expense"
 
             if amount > 0:
-                # Use AI parser to determine category & payment method
                 nlp_res = ai_service.parse_natural_language_expense(desc)
                 category = "Salary" if txn_type == "income" and "sal" in desc.lower() else (
                     "Income" if txn_type == "income" else nlp_res.get("category", "Other")

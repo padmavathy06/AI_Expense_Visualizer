@@ -11,28 +11,37 @@ DEFAULT_SUB_ICONS = {
 }
 
 
-def get_subscriptions(status_filter=None):
-    """Fetches subscriptions with billing analytics and account link metadata."""
+def get_subscriptions(status_filter=None, user_id=None):
+    """Fetches subscriptions with billing analytics and account link metadata for user_id."""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    query = """
+    conditions = []
+    params = []
+
+    if user_id is not None:
+        conditions.append("s.user_id = %s")
+        params.append(user_id)
+
+    if status_filter and status_filter != "all":
+        conditions.append("s.status = %s")
+        params.append(status_filter)
+
+    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
+    query = f"""
         SELECT s.*, a.name as account_name, a.icon as account_icon
         FROM subscriptions s
         LEFT JOIN accounts a ON s.account_id = a.id
+        {where_clause}
+        ORDER BY s.next_billing_date ASC
     """
-    if status_filter and status_filter != "all":
-        query += " WHERE s.status = %s"
-        cursor.execute(query + " ORDER BY s.next_billing_date ASC", (status_filter,))
-    else:
-        cursor.execute(query + " ORDER BY s.next_billing_date ASC")
-
+    cursor.execute(query, tuple(params) if params else None)
     subs = cursor.fetchall()
     today = date.today()
 
     for s in subs:
         s["amount"] = float(s.get("amount") or 0.0)
-        # Calculate days until next renewal
         try:
             nb_date = s["next_billing_date"]
             if isinstance(nb_date, str):
@@ -50,8 +59,8 @@ def get_subscriptions(status_filter=None):
 
 
 def create_subscription(name, amount, category="Bills", billing_cycle="monthly",
-                        next_billing_date=None, account_id=None, notes="", icon=None):
-    """Creates a recurring subscription / bill record."""
+                        next_billing_date=None, account_id=None, notes="", icon=None, user_id=None):
+    """Creates a recurring subscription / bill record for user_id."""
     if not next_billing_date:
         next_billing_date = (date.today() + timedelta(days=30)).isoformat()
     if not icon:
@@ -60,9 +69,9 @@ def create_subscription(name, amount, category="Bills", billing_cycle="monthly",
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO subscriptions (name, amount, category, billing_cycle, next_billing_date, account_id, status, icon, notes)
-        VALUES (%s, %s, %s, %s, %s, %s, 'active', %s, %s)
-    """, (name, amount, category, billing_cycle, next_billing_date, account_id, icon, notes))
+        INSERT INTO subscriptions (user_id, name, amount, category, billing_cycle, next_billing_date, account_id, status, icon, notes)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, 'active', %s, %s)
+    """, (user_id, name, amount, category, billing_cycle, next_billing_date, account_id, icon, notes))
     conn.commit()
     new_id = cursor.lastrowid
     cursor.close()
@@ -70,38 +79,48 @@ def create_subscription(name, amount, category="Bills", billing_cycle="monthly",
     return new_id
 
 
-def update_subscription(sub_id, name, amount, category, billing_cycle, next_billing_date, account_id=None, status="active", notes=""):
+def update_subscription(sub_id, name, amount, category, billing_cycle, next_billing_date, account_id=None, status="active", notes="", user_id=None):
     """Updates existing subscription details."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE subscriptions
-        SET name = %s, amount = %s, category = %s, billing_cycle = %s, next_billing_date = %s, account_id = %s, status = %s, notes = %s
-        WHERE id = %s
-    """, (name, amount, category, billing_cycle, next_billing_date, account_id, status, notes, sub_id))
+    if user_id is not None:
+        cursor.execute("""
+            UPDATE subscriptions
+            SET name = %s, amount = %s, category = %s, billing_cycle = %s, next_billing_date = %s, account_id = %s, status = %s, notes = %s
+            WHERE id = %s AND user_id = %s
+        """, (name, amount, category, billing_cycle, next_billing_date, account_id, status, notes, sub_id, user_id))
+    else:
+        cursor.execute("""
+            UPDATE subscriptions
+            SET name = %s, amount = %s, category = %s, billing_cycle = %s, next_billing_date = %s, account_id = %s, status = %s, notes = %s
+            WHERE id = %s
+        """, (name, amount, category, billing_cycle, next_billing_date, account_id, status, notes, sub_id))
     conn.commit()
     cursor.close()
     conn.close()
 
 
-def delete_subscription(sub_id):
+def delete_subscription(sub_id, user_id=None):
     """Deletes a subscription record."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM subscriptions WHERE id = %s", (sub_id,))
+    if user_id is not None:
+        cursor.execute("DELETE FROM subscriptions WHERE id = %s AND user_id = %s", (sub_id, user_id))
+    else:
+        cursor.execute("DELETE FROM subscriptions WHERE id = %s", (sub_id,))
     conn.commit()
     cursor.close()
     conn.close()
 
 
-def get_subscription_summary():
+def get_subscription_summary(user_id=None):
     """
-    Computes overall recurring expenses metrics:
+    Computes overall recurring expenses metrics for user_id:
     - Monthly recurring burn rate
     - Annualized recurring cost
     - Upcoming bills due in next 7-14 days
     """
-    subs = get_subscriptions(status_filter="active")
+    subs = get_subscriptions(status_filter="active", user_id=user_id)
 
     monthly_total = 0.0
     upcoming_due = []
@@ -130,9 +149,9 @@ def get_subscription_summary():
     }
 
 
-def seed_default_subscriptions():
-    """Seeds realistic subscription services if table is empty."""
-    subs = get_subscriptions()
+def seed_default_subscriptions(user_id=None):
+    """Seeds realistic subscription services for user_id."""
+    subs = get_subscriptions(user_id=user_id)
     if not subs:
         today = date.today()
         defaults = [
@@ -144,4 +163,4 @@ def seed_default_subscriptions():
             ("Amazon Prime Annual", 1499.00, "Shopping", "yearly", (today + timedelta(days=40)).isoformat(), "📦", "Fast delivery & Prime Video")
         ]
         for name, amt, cat, cycle, nb_date, icon, notes in defaults:
-            create_subscription(name, amt, cat, cycle, nb_date, None, notes, icon)
+            create_subscription(name, amt, cat, cycle, nb_date, None, notes, icon, user_id=user_id)

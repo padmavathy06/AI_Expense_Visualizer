@@ -85,27 +85,33 @@ class SQLiteDictCursor:
 
 def get_db_connection():
     """
-    Connect to MySQL with automatic SQLite fallback if MySQL is unreachable.
+    Connect to MySQL / PostgreSQL with automatic SQLite fallback if unavailable.
+    Supports standard DB_HOST, DB_USER envs and cloud DATABASE_URL.
     Returns a unified DB connection wrapper.
     """
-    if DB_TYPE == "mysql":
+    db_url = os.getenv("DATABASE_URL", "").strip()
+
+    if db_url.startswith("mysql://") or db_url.startswith("mysql+mysqlconnector://") or DB_TYPE == "mysql":
         try:
             import mysql.connector
-            conn = mysql.connector.connect(
-                host=DB_HOST,
-                port=DB_PORT,
-                user=DB_USER,
-                password=DB_PASSWORD,
-                database=DB_NAME,
-                connect_timeout=3
-            )
+            if db_url:
+                conn = mysql.connector.connect(db_url)
+            else:
+                conn = mysql.connector.connect(
+                    host=DB_HOST,
+                    port=DB_PORT,
+                    user=DB_USER,
+                    password=DB_PASSWORD,
+                    database=DB_NAME,
+                    connect_timeout=3
+                )
             return DBWrapper(conn, is_sqlite=False)
-        except Exception as e:
-            conn = sqlite3.connect(SQLITE_DB_PATH)
-            return DBWrapper(conn, is_sqlite=True)
-    else:
-        conn = sqlite3.connect(SQLITE_DB_PATH)
-        return DBWrapper(conn, is_sqlite=True)
+        except Exception:
+            pass
+
+    # Persistent SQLite database file fallback
+    conn = sqlite3.connect(SQLITE_DB_PATH)
+    return DBWrapper(conn, is_sqlite=True)
 
 
 def init_db():
@@ -115,10 +121,39 @@ def init_db():
 
     if not conn.is_sqlite:
         # MySQL Schemas
+        # 0. Users & Authentication
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                email VARCHAR(150) NOT NULL UNIQUE,
+                phone VARCHAR(20) NULL,
+                password_hash VARCHAR(255) NOT NULL,
+                avatar VARCHAR(255) NULL DEFAULT '',
+                is_verified BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS otp_verifications (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                phone VARCHAR(20) NOT NULL,
+                email VARCHAR(150) NOT NULL,
+                otp_code VARCHAR(10) NOT NULL,
+                payload TEXT NOT NULL,
+                attempts INT DEFAULT 0,
+                last_sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                expires_at DATETIME NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         # 1. Accounts & Banking
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS accounts (
                 id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NULL,
                 name VARCHAR(100) NOT NULL,
                 type VARCHAR(50) NOT NULL, -- 'Bank', 'Credit Card', 'Wallet', 'Cash', 'Investment'
                 balance DECIMAL(12,2) NOT NULL DEFAULT 0.00,
@@ -135,6 +170,7 @@ def init_db():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS transactions (
                 id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NULL,
                 type VARCHAR(20) NOT NULL DEFAULT 'expense', -- 'expense', 'income', 'transfer'
                 account_id INT NULL,
                 to_account_id INT NULL, -- for transfers
@@ -155,6 +191,7 @@ def init_db():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS subscriptions (
                 id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NULL,
                 name VARCHAR(100) NOT NULL,
                 amount DECIMAL(10,2) NOT NULL,
                 category VARCHAR(100) NOT NULL DEFAULT 'Bills',
@@ -172,6 +209,7 @@ def init_db():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS financial_goals (
                 id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NULL,
                 title VARCHAR(150) NOT NULL,
                 target_amount DECIMAL(12,2) NOT NULL,
                 current_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
@@ -184,10 +222,11 @@ def init_db():
             )
         """)
 
-        # 5. Legacy & Compatibility Tables (expenses, budget, category_budgets, ai_chat_history)
+        # 5. Expenses, budget, category_budgets
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS expenses (
                 id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NULL,
                 amount DECIMAL(10,2) NOT NULL,
                 category VARCHAR(100) NOT NULL,
                 description VARCHAR(255) NULL,
@@ -200,6 +239,7 @@ def init_db():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS budget (
                 id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NULL,
                 monthly_budget DECIMAL(10,2) NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -208,7 +248,8 @@ def init_db():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS category_budgets (
                 id INT AUTO_INCREMENT PRIMARY KEY,
-                category VARCHAR(100) NOT NULL UNIQUE,
+                user_id INT NULL,
+                category VARCHAR(100) NOT NULL,
                 allocated_amount DECIMAL(10,2) NOT NULL,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             )
@@ -217,6 +258,7 @@ def init_db():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS user_settings (
                 id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NULL,
                 currency_symbol VARCHAR(10) NOT NULL DEFAULT '₹',
                 currency_code VARCHAR(10) NOT NULL DEFAULT 'INR',
                 ai_persona VARCHAR(50) NOT NULL DEFAULT 'Finley',
@@ -226,9 +268,38 @@ def init_db():
 
     else:
         # SQLite Schemas
+        # 0. Users & Authentication
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(100) NOT NULL,
+                email VARCHAR(150) NOT NULL UNIQUE,
+                phone VARCHAR(20) NULL,
+                password_hash VARCHAR(255) NOT NULL,
+                avatar VARCHAR(255) NULL DEFAULT '',
+                is_verified BOOLEAN DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS otp_verifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                phone VARCHAR(20) NOT NULL,
+                email VARCHAR(150) NOT NULL,
+                otp_code VARCHAR(10) NOT NULL,
+                payload TEXT NOT NULL,
+                attempts INT DEFAULT 0,
+                last_sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                expires_at DATETIME NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS accounts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INT NULL,
                 name VARCHAR(100) NOT NULL,
                 type VARCHAR(50) NOT NULL,
                 balance DECIMAL(12,2) NOT NULL DEFAULT 0.00,
@@ -244,6 +315,7 @@ def init_db():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS transactions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INT NULL,
                 type VARCHAR(20) NOT NULL DEFAULT 'expense',
                 account_id INT NULL,
                 to_account_id INT NULL,
@@ -263,6 +335,7 @@ def init_db():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS subscriptions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INT NULL,
                 name VARCHAR(100) NOT NULL,
                 amount DECIMAL(10,2) NOT NULL,
                 category VARCHAR(100) NOT NULL DEFAULT 'Bills',
@@ -279,6 +352,7 @@ def init_db():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS financial_goals (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INT NULL,
                 title VARCHAR(150) NOT NULL,
                 target_amount DECIMAL(12,2) NOT NULL,
                 current_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
@@ -294,6 +368,7 @@ def init_db():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS expenses (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INT NULL,
                 amount DECIMAL(10,2) NOT NULL,
                 category VARCHAR(100) NOT NULL,
                 description VARCHAR(255) NULL,
@@ -306,6 +381,7 @@ def init_db():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS budget (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INT NULL,
                 monthly_budget DECIMAL(10,2) NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -314,7 +390,8 @@ def init_db():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS category_budgets (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                category VARCHAR(100) NOT NULL UNIQUE,
+                user_id INT NULL,
+                category VARCHAR(100) NOT NULL,
                 allocated_amount DECIMAL(10,2) NOT NULL,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -323,12 +400,48 @@ def init_db():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS user_settings (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INT NULL,
                 currency_symbol VARCHAR(10) NOT NULL DEFAULT '₹',
                 currency_code VARCHAR(10) NOT NULL DEFAULT 'INR',
                 ai_persona VARCHAR(50) NOT NULL DEFAULT 'Finley',
                 theme VARCHAR(20) NOT NULL DEFAULT 'light'
             )
         """)
+
+    # Safe column migration for existing tables
+    tables_to_upgrade = [
+        "accounts", "transactions", "subscriptions",
+        "financial_goals", "expenses", "budget",
+        "category_budgets", "user_settings"
+    ]
+    for table_name in tables_to_upgrade:
+        try:
+            cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN user_id INT NULL")
+        except Exception:
+            pass
+
+    # Safe migration for user columns
+    user_cols_to_add = [
+        ("phone", "VARCHAR(20) NULL"),
+        ("avatar", "VARCHAR(255) NULL DEFAULT ''"),
+        ("is_verified", "BOOLEAN DEFAULT 1")
+    ]
+    for col_name, col_type in user_cols_to_add:
+        try:
+            cursor.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}")
+        except Exception:
+            pass
+
+    # Safe migration for otp_verifications
+    otp_cols_to_add = [
+        ("attempts", "INT DEFAULT 0"),
+        ("last_sent_at", "DATETIME NULL")
+    ]
+    for col_name, col_type in otp_cols_to_add:
+        try:
+            cursor.execute(f"ALTER TABLE otp_verifications ADD COLUMN {col_name} {col_type}")
+        except Exception:
+            pass
 
     conn.commit()
     cursor.close()

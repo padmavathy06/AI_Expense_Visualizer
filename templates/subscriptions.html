@@ -28,6 +28,17 @@
         <div class="nav-actions">
             <button id="themeToggleBtn" class="theme-toggle-btn" title="Toggle Dark/Light Mode">🌙</button>
             <button class="btn btn-primary btn-sm" data-modal-target="addSubscriptionModal">+ New Subscription</button>
+            {% if current_user %}
+            <a href="/profile" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 700;" title="View & Edit Profile">
+                {% if current_user.avatar %}
+                <img src="{{ current_user.avatar }}" style="width: 20px; height: 20px; border-radius: 50%; object-fit: cover;">
+                {% else %}
+                <span>👤</span>
+                {% endif %}
+                <span>{{ current_user.name }}</span>
+            </a>
+            <a href="/logout" class="btn btn-secondary btn-sm" title="Log out">🚪 Logout</a>
+            {% endif %}
         </div>
     </header>
 

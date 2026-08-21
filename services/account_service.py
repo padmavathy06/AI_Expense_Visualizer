@@ -17,18 +17,20 @@ DEFAULT_ICONS = {
 }
 
 
-def get_all_accounts():
-    """Fetches all accounts with balance, credit utilization metrics, and summary data."""
+def get_all_accounts(user_id=None):
+    """Fetches all accounts for user_id with balance, credit utilization metrics, and summary data."""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM accounts ORDER BY type ASC, id ASC")
+    if user_id is not None:
+        cursor.execute("SELECT * FROM accounts WHERE user_id = %s ORDER BY type ASC, id ASC", (user_id,))
+    else:
+        cursor.execute("SELECT * FROM accounts ORDER BY type ASC, id ASC")
     accounts = cursor.fetchall()
 
     for acc in accounts:
         acc["balance"] = float(acc.get("balance") or 0.0)
         acc["card_limit"] = float(acc.get("card_limit") or 0.0)
         if acc["type"] == "Credit Card" and acc["card_limit"] > 0:
-            # For Credit Cards, balance is typically the owed amount (spent)
             utilized_pct = (acc["balance"] / acc["card_limit"]) * 100
             acc["utilization_pct"] = round(min(100.0, max(0.0, utilized_pct)), 1)
             acc["available_credit"] = max(0.0, acc["card_limit"] - acc["balance"])
@@ -41,11 +43,14 @@ def get_all_accounts():
     return accounts
 
 
-def get_account_by_id(account_id):
+def get_account_by_id(account_id, user_id=None):
     """Retrieve single account record."""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM accounts WHERE id = %s", (account_id,))
+    if user_id is not None:
+        cursor.execute("SELECT * FROM accounts WHERE id = %s AND user_id = %s", (account_id, user_id))
+    else:
+        cursor.execute("SELECT * FROM accounts WHERE id = %s", (account_id,))
     acc = cursor.fetchone()
     cursor.close()
     conn.close()
@@ -55,8 +60,8 @@ def get_account_by_id(account_id):
     return acc
 
 
-def create_account(name, type, balance=0.0, currency="INR", card_limit=0.0, billing_day=1, color=None, icon=None):
-    """Creates a new banking or wallet account."""
+def create_account(name, type, balance=0.0, currency="INR", card_limit=0.0, billing_day=1, color=None, icon=None, user_id=None):
+    """Creates a new banking or wallet account for user_id."""
     if not color:
         color = DEFAULT_COLORS.get(type, "#4f46e5")
     if not icon:
@@ -65,9 +70,9 @@ def create_account(name, type, balance=0.0, currency="INR", card_limit=0.0, bill
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO accounts (name, type, balance, currency, card_limit, billing_day, color, icon)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-    """, (name, type, balance, currency, card_limit, billing_day, color, icon))
+        INSERT INTO accounts (user_id, name, type, balance, currency, card_limit, billing_day, color, icon)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+    """, (user_id, name, type, balance, currency, card_limit, billing_day, color, icon))
     conn.commit()
     new_id = cursor.lastrowid
     cursor.close()
@@ -75,32 +80,42 @@ def create_account(name, type, balance=0.0, currency="INR", card_limit=0.0, bill
     return new_id
 
 
-def update_account(account_id, name, type, balance, card_limit=0.0, billing_day=1, color=None, icon=None):
+def update_account(account_id, name, type, balance, card_limit=0.0, billing_day=1, color=None, icon=None, user_id=None):
     """Updates existing account metadata and balance."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE accounts
-        SET name = %s, type = %s, balance = %s, card_limit = %s, billing_day = %s, color = %s, icon = %s
-        WHERE id = %s
-    """, (name, type, balance, card_limit, billing_day, color, icon, account_id))
+    if user_id is not None:
+        cursor.execute("""
+            UPDATE accounts
+            SET name = %s, type = %s, balance = %s, card_limit = %s, billing_day = %s, color = %s, icon = %s
+            WHERE id = %s AND user_id = %s
+        """, (name, type, balance, card_limit, billing_day, color, icon, account_id, user_id))
+    else:
+        cursor.execute("""
+            UPDATE accounts
+            SET name = %s, type = %s, balance = %s, card_limit = %s, billing_day = %s, color = %s, icon = %s
+            WHERE id = %s
+        """, (name, type, balance, card_limit, billing_day, color, icon, account_id))
     conn.commit()
     cursor.close()
     conn.close()
 
 
-def delete_account(account_id):
+def delete_account(account_id, user_id=None):
     """Deletes an account."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM accounts WHERE id = %s", (account_id,))
+    if user_id is not None:
+        cursor.execute("DELETE FROM accounts WHERE id = %s AND user_id = %s", (account_id, user_id))
+    else:
+        cursor.execute("DELETE FROM accounts WHERE id = %s", (account_id,))
     conn.commit()
     cursor.close()
     conn.close()
 
 
-def transfer_funds(from_account_id, to_account_id, amount, transfer_date=None, notes=None):
-    """Performs an atomic money transfer between two accounts."""
+def transfer_funds(from_account_id, to_account_id, amount, transfer_date=None, notes=None, user_id=None):
+    """Performs an atomic money transfer between two accounts belonging to user_id."""
     if not transfer_date:
         from datetime import date
         transfer_date = date.today().isoformat()
@@ -109,16 +124,20 @@ def transfer_funds(from_account_id, to_account_id, amount, transfer_date=None, n
     cursor = conn.cursor()
 
     try:
-        # Deduct from source account
-        cursor.execute("UPDATE accounts SET balance = balance - %s WHERE id = %s", (amount, from_account_id))
-        # Add to destination account
-        cursor.execute("UPDATE accounts SET balance = balance + %s WHERE id = %s", (amount, to_account_id))
-
-        # Record transfer transaction in unified ledger
-        cursor.execute("""
-            INSERT INTO transactions (type, account_id, to_account_id, amount, category, description, transaction_date, payment_method)
-            VALUES ('transfer', %s, %s, %s, 'Transfer', %s, %s, 'Bank Transfer')
-        """, (from_account_id, to_account_id, amount, notes or "Account Transfer", transfer_date))
+        if user_id is not None:
+            cursor.execute("UPDATE accounts SET balance = balance - %s WHERE id = %s AND user_id = %s", (amount, from_account_id, user_id))
+            cursor.execute("UPDATE accounts SET balance = balance + %s WHERE id = %s AND user_id = %s", (amount, to_account_id, user_id))
+            cursor.execute("""
+                INSERT INTO transactions (user_id, type, account_id, to_account_id, amount, category, description, transaction_date, payment_method)
+                VALUES (%s, 'transfer', %s, %s, %s, 'Transfer', %s, %s, 'Bank Transfer')
+            """, (user_id, from_account_id, to_account_id, amount, notes or "Account Transfer", transfer_date))
+        else:
+            cursor.execute("UPDATE accounts SET balance = balance - %s WHERE id = %s", (amount, from_account_id))
+            cursor.execute("UPDATE accounts SET balance = balance + %s WHERE id = %s", (amount, to_account_id))
+            cursor.execute("""
+                INSERT INTO transactions (type, account_id, to_account_id, amount, category, description, transaction_date, payment_method)
+                VALUES ('transfer', %s, %s, %s, 'Transfer', %s, %s, 'Bank Transfer')
+            """, (from_account_id, to_account_id, amount, notes or "Account Transfer", transfer_date))
 
         conn.commit()
     except Exception as e:
@@ -129,15 +148,15 @@ def transfer_funds(from_account_id, to_account_id, amount, transfer_date=None, n
         conn.close()
 
 
-def get_net_worth_summary():
+def get_net_worth_summary(user_id=None):
     """
-    Computes real-time Net Worth breakdown:
+    Computes real-time Net Worth breakdown for user_id:
     - Liquid Assets (Bank Accounts + Wallets + Cash)
     - Investments
     - Liabilities (Credit Card Dues)
     - Net Worth = Assets - Liabilities
     """
-    accounts = get_all_accounts()
+    accounts = get_all_accounts(user_id=user_id)
 
     liquid_assets = 0.0
     investments = 0.0
@@ -166,11 +185,14 @@ def get_net_worth_summary():
     }
 
 
-def seed_default_accounts():
-    """Initializes standard starter accounts with realistic demo balances."""
+def seed_default_accounts(user_id=None):
+    """Initializes standard starter accounts for user_id with demo balances."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM accounts")
+    if user_id is not None:
+        cursor.execute("DELETE FROM accounts WHERE user_id = %s", (user_id,))
+    else:
+        cursor.execute("DELETE FROM accounts")
     conn.commit()
     cursor.close()
     conn.close()
@@ -183,4 +205,4 @@ def seed_default_accounts():
         ("Zerodha Mutual Funds", "Investment", 120000.00, "INR", 0.0, 1, "#8b5cf6", "📈")
     ]
     for name, atype, bal, curr, limit, day, color, icon in defaults:
-        create_account(name, atype, bal, curr, limit, day, color, icon)
+        create_account(name, atype, bal, curr, limit, day, color, icon, user_id=user_id)

@@ -5,25 +5,36 @@ NEEDS_CATEGORIES = ["Bills", "Health", "Education", "Food"]
 WANTS_CATEGORIES = ["Shopping", "Entertainment", "Travel", "Other"]
 
 
-def get_daily_heatmap_matrix(days=60):
+def get_daily_heatmap_matrix(days=60, user_id=None):
     """
-    Computes daily spending intensity matrix for the last N days (for GitHub-style heatmap).
-    Returns list of dicts: { date: 'YYYY-MM-DD', amount: float, count: int, level: 0-4 }
+    Computes daily spending intensity matrix for the last N days for user_id.
     """
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
     start_date = (date.today() - timedelta(days=days)).isoformat()
-    cursor.execute("""
-        SELECT
-            DATE_FORMAT(expense_date, '%Y-%m-%d') as dt,
-            SUM(amount) as total,
-            COUNT(*) as count
-        FROM expenses
-        WHERE expense_date >= %s
-        GROUP BY DATE_FORMAT(expense_date, '%Y-%m-%d')
-        ORDER BY dt ASC
-    """, (start_date,))
+    if user_id is not None:
+        cursor.execute("""
+            SELECT
+                DATE_FORMAT(expense_date, '%Y-%m-%d') as dt,
+                SUM(amount) as total,
+                COUNT(*) as count
+            FROM expenses
+            WHERE expense_date >= %s AND user_id = %s
+            GROUP BY DATE_FORMAT(expense_date, '%Y-%m-%d')
+            ORDER BY dt ASC
+        """, (start_date, user_id))
+    else:
+        cursor.execute("""
+            SELECT
+                DATE_FORMAT(expense_date, '%Y-%m-%d') as dt,
+                SUM(amount) as total,
+                COUNT(*) as count
+            FROM expenses
+            WHERE expense_date >= %s
+            GROUP BY DATE_FORMAT(expense_date, '%Y-%m-%d')
+            ORDER BY dt ASC
+        """, (start_date,))
     rows = cursor.fetchall()
     spend_map = {r["dt"]: {"amount": float(r["total"]), "count": int(r["count"])} for r in rows}
 
@@ -37,7 +48,6 @@ def get_daily_heatmap_matrix(days=60):
         dt_str = (date.today() - timedelta(days=i)).isoformat()
         item = spend_map.get(dt_str, {"amount": 0.0, "count": 0})
         amt = item["amount"]
-        # Level calculation (0: none, 1: low, 2: medium, 3: high, 4: peak)
         if amt == 0:
             level = 0
         elif amt < (max_spend * 0.25):
@@ -59,22 +69,34 @@ def get_daily_heatmap_matrix(days=60):
     return heatmap
 
 
-def get_cash_flow_trends():
+def get_cash_flow_trends(user_id=None):
     """
-    Computes monthly Income vs Expenses vs Net Savings comparisons.
+    Computes monthly Income vs Expenses vs Net Savings comparisons for user_id.
     """
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    cursor.execute("""
-        SELECT
-            DATE_FORMAT(transaction_date, '%Y-%m') as month,
-            SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) as income,
-            SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) as expense
-        FROM transactions
-        GROUP BY DATE_FORMAT(transaction_date, '%Y-%m')
-        ORDER BY month ASC
-    """)
+    if user_id is not None:
+        cursor.execute("""
+            SELECT
+                DATE_FORMAT(transaction_date, '%Y-%m') as month,
+                SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) as income,
+                SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) as expense
+            FROM transactions
+            WHERE user_id = %s
+            GROUP BY DATE_FORMAT(transaction_date, '%Y-%m')
+            ORDER BY month ASC
+        """, (user_id,))
+    else:
+        cursor.execute("""
+            SELECT
+                DATE_FORMAT(transaction_date, '%Y-%m') as month,
+                SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) as income,
+                SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) as expense
+            FROM transactions
+            GROUP BY DATE_FORMAT(transaction_date, '%Y-%m')
+            ORDER BY month ASC
+        """)
     rows = cursor.fetchall()
 
     cursor.close()
@@ -99,10 +121,7 @@ def get_cash_flow_trends():
 
 def get_50_30_20_compliance(category_data: list, monthly_income: float = 0.0, monthly_expenses: float = 0.0):
     """
-    Audits actual spending breakdown against the 50/30/20 budget benchmark:
-    - 50% Needs: Bills, Healthcare, Groceries/Food, Education
-    - 30% Wants: Shopping, Entertainment, Travel, Dining
-    - 20% Savings: Net income retained
+    Audits actual spending breakdown against the 50/30/20 budget benchmark.
     """
     needs_total = 0.0
     wants_total = 0.0
